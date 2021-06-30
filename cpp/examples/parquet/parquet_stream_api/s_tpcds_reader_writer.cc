@@ -24,6 +24,7 @@
 #include <iostream>
 #include <utility>
 #include <fstream>
+#include <chrono>
 
 #include "arrow/io/file.h"
 #include "parquet/exception.h"
@@ -31,13 +32,18 @@
 #include "parquet/stream_writer.h"
 #include <parquet/arrow/reader.h>
 #include <arrow/ipc/api.h>
+#include <arrow/filesystem/localfs.h>
 #include "arrow/ipc/options.h"
 #include "arrow/ipc/writer.h"
 #include "arrow/util/compression.h"
 #include "arrow/type_fwd.h"
 #include "arrow/table.h"
 #include "arrow/ipc/feather.h"
-
+#include <arrow/api.h>
+using arrow::DoubleBuilder;
+using arrow::Int32Builder;
+const int PRED = 40000;
+const int LOC = 700000;
 // This file gives an example of how to use the parquet::StreamWriter
 // and parquet::StreamReader classes.
 // It shows writing/reading of the supported types as well as how a
@@ -336,15 +342,34 @@ std::string TestData::string_;
 
 class type;
 
-void WriteParquetFile() {
-  std::shared_ptr<arrow::io::FileOutputStream> outfile;
-  std::string f_name = "/mnt/dataset1/catalog_sales_sample";
 
+
+std::string Get_Parquet_File(std::string f_name, std::string comp) {
+  return f_name+"_"+comp+".parquet";
+}
+
+
+std::string Get_Arrow_File(std::string f_name, std::string comp) {
+  return f_name+"_"+comp+".arrow";
+}
+
+
+arrow::Status WriteParquetFile(std::string f_name, std::string comp, int comp_level = std::numeric_limits<int>::min()) {
+  std::shared_ptr<arrow::io::FileOutputStream> outfile;
+  std::string p_name = Get_Parquet_File(f_name,comp);
+  std::cout << p_name << std::endl;
+  arrow::Compression::type compression;
+  ARROW_ASSIGN_OR_RAISE(compression, arrow::util::Codec::GetCompressionType(comp));
   PARQUET_ASSIGN_OR_THROW(
       outfile,
-      arrow::io::FileOutputStream::Open(f_name+".parquet"));
+      arrow::io::FileOutputStream::Open(p_name));
 
   parquet::WriterProperties::Builder builder;
+  builder.compression(compression);
+  if (comp_level!=std::numeric_limits<int>::min()){
+    builder.compression_level(comp_level);
+  }
+//  builder.encoding();
 
 #if defined ARROW_WITH_BROTLI
   builder.compression(parquet::Compression::BROTLI);
@@ -357,7 +382,7 @@ void WriteParquetFile() {
       parquet::ParquetFileWriter::Open(outfile, table, builder.build())};
 
 
-  os.SetMaxRowGroupSize(10000);
+//  os.SetMaxRowGroupSize(10000);
 
   std::ifstream ifile(f_name+".dat");
 
@@ -418,111 +443,143 @@ void WriteParquetFile() {
   }
   ifile.close();
   std::cout << "close input file." << std::endl;
-  os << parquet::EndRowGroup;
+//  os << parquet::EndRowGroup;
   std::cout << "close input file." << std::endl;
   std::cout << "Parquet Stream Writing complete." << std::endl;
+
+  return arrow::Status::OK();
 }
 
-void ReadParquetFile() {
-  std::shared_ptr<arrow::io::ReadableFile> infile;
+void FilterParquetFile(std::string filename) {
 
-  PARQUET_ASSIGN_OR_THROW(
-      infile,
-      arrow::io::ReadableFile::Open("parquet-stream-api-example.parquet"));
+  std::unique_ptr<parquet::ParquetFileReader> parquet_reader =
+          parquet::ParquetFileReader::OpenFile(filename, false);
 
-  parquet::StreamReader os{parquet::ParquetFileReader::Open(infile)};
+  std::shared_ptr<parquet::ColumnReader> column_reader;
+  int n_rowgroup = parquet_reader->metadata()->num_row_groups();
+  int qualified = 0;
+  int16_t definition_level;
+  int16_t repetition_level;
+  std::cout << "# of row: "<< parquet_reader->metadata()->num_rows()<< std::endl;
+  std::cout << "# of row group: "<< n_rowgroup<< std::endl;
 
+  for (int i=0;i<n_rowgroup;i++){
+    std::cout << "row group: "<< i<< std::endl;
+    column_reader = parquet_reader->RowGroup(i)->Column(1);
+    parquet::Int32Reader* int32_reader =
+            static_cast<parquet::Int32Reader*>(column_reader.get());
 
-  optional<std::string> opt_string;
-  char ch;
-  char char_array[4];
-  int8_t int8;
-  uint16_t uint16;
-  int32_t int32;
-  optional<uint64_t> opt_uint64;
-  double d;
-  UserTimestamp ts_user;
-  std::chrono::milliseconds ts_ms;
-  int i;
+    int64_t  values_read = 0;
 
-  for (i = 0; !os.eof(); ++i) {
-    os >> opt_string;
-    os >> ch;
-    os >> char_array;
-    os >> int8;
-    os >> uint16;
-    os >> int32;
-    os >> opt_uint64;
-    os >> d;
-    os >> ts_user;
-    os >> ts_ms;
-    os >> parquet::EndRow;
-
-    if (0) {
-      // For debugging.
-      std::cout << "Row #" << i << std::endl;
-
-      std::cout << "string[";
-      if (opt_string) {
-        std::cout << *opt_string;
-      } else {
-        std::cout << "N/A";
+    while (int32_reader->HasNext()) {
+      int32_t value;
+      // Read one value at a time. The number of rows read is returned. values_read
+      // contains the number of non-null rows
+      int32_reader->ReadBatch(1, &definition_level, &repetition_level, &value, &values_read);
+      // There are no NULL values in the rows written
+      if (values_read == 0){
+        continue;
       }
-      std::cout << "] char[" << ch << "] charArray[" << char_array << "] int8["
-                << int(int8) << "] uint16[" << uint16 << "] int32[" << int32;
-      std::cout << "] uint64[";
-      if (opt_uint64) {
-        std::cout << *opt_uint64;
-      } else {
-        std::cout << "N/A";
+//      std::cout << value << std::endl;
+      if (value>PRED){
+        qualified++;
       }
-      std::cout << "] double[" << d << "] tsUser[" << ts_user << "] tsMs["
-                << ts_ms.count() << "]" << std::endl;
+
     }
-    // Check data.
-    switch (i % 3) {
-      case 0:
-        assert(opt_string == TestData::GetOptString(i));
-        break;
-      case 1:
-        assert(*opt_string == TestData::GetStringView(i));
-        break;
-      case 2:
-        assert(*opt_string == TestData::GetCharPtr(i));
-        break;
-    }
-    assert(ch == TestData::GetChar(i));
-    switch (i % 2) {
-      case 0:
-        assert(0 == std::memcmp(char_array, TestData::char4_array, sizeof(char_array)));
-        break;
-      case 1:
-        assert(0 == std::memcmp(char_array, TestData::GetCharPtr(i), sizeof(char_array)));
-        break;
-    }
-    assert(int8 == TestData::GetInt8(i));
-    assert(uint16 == TestData::GetUInt16(i));
-    assert(int32 == TestData::GetInt32(i));
-    assert(opt_uint64 == TestData::GetOptUInt64(i));
-    assert(std::abs(d - TestData::GetDouble(i)) < 1e-6);
-    assert(ts_user == TestData::GetUserTimestamp(i));
-    assert(ts_ms == TestData::GetChronoMilliseconds(i));
   }
-  assert(TestData::num_rows == i);
-
-  std::cout << "Parquet Stream Reading complete." << std::endl;
+  std::cout << "number of value grater than "<<PRED<<": "<< qualified<< std::endl;
 }
 
-// read
-arrow::Status read_Parquet2Arrow_file() {
+
+void SumParquetFile(std::string filename) {
+
+  std::unique_ptr<parquet::ParquetFileReader> parquet_reader =
+          parquet::ParquetFileReader::OpenFile(filename, false);
+
+  std::shared_ptr<parquet::ColumnReader> column_reader;
+  int n_rowgroup = parquet_reader->metadata()->num_row_groups();
+  int sum = 0;
+  int16_t definition_level;
+  int16_t repetition_level;
+  std::cout << "# of row: "<< parquet_reader->metadata()->num_rows()<< std::endl;
+  std::cout << "# of row group: "<< n_rowgroup<< std::endl;
+
+  for (int i=0;i<n_rowgroup;i++){
+    std::cout << "row group: "<< i<< std::endl;
+    column_reader = parquet_reader->RowGroup(i)->Column(1);
+    parquet::Int32Reader* int32_reader =
+            static_cast<parquet::Int32Reader*>(column_reader.get());
+
+    int64_t  values_read = 0;
+
+    while (int32_reader->HasNext()) {
+      int32_t value;
+      // Read one value at a time. The number of rows read is returned. values_read
+      // contains the number of non-null rows
+      int32_reader->ReadBatch(1, &definition_level, &repetition_level, &value, &values_read);
+      // There are no NULL values in the rows written
+      if (values_read == 0){
+        continue;
+      }
+//      std::cout << value << std::endl;
+      sum+=value;
+
+    }
+  }
+  std::cout << "Sum parquet: "<< sum<< std::endl;
+}
+
+void LookupParquetFile(std::string filename, int loc) {
+
+  std::unique_ptr<parquet::ParquetFileReader> parquet_reader =
+          parquet::ParquetFileReader::OpenFile(filename, false);
+
+  std::shared_ptr<parquet::ColumnReader> column_reader;
+  int n_rowgroup = parquet_reader->metadata()->num_row_groups();
+  int16_t definition_level;
+  int16_t repetition_level;
+
+  int32_t value;
+
+  int n_row = parquet_reader->metadata()->num_rows();
+  std::cout << "# of row: "<< n_row << std::endl;
+  assert(loc<n_row);
+  std::cout << "# of row group: "<< n_rowgroup<< std::endl;
+
+  int row_cnt = 0;
+  for (int i=0;i<n_rowgroup;i++){
+    if (row_cnt + parquet_reader->RowGroup(i)->metadata()->num_rows()<loc+1){
+      row_cnt+=parquet_reader->RowGroup(i)->metadata()->num_rows();
+      continue;
+    }
+    std::cout << "row group: "<< i<< std::endl;
+    column_reader = parquet_reader->RowGroup(i)->Column(1);
+    parquet::Int32Reader* int32_reader =
+            static_cast<parquet::Int32Reader*>(column_reader.get());
+
+    int64_t  values_read = 0;
+
+
+    // Read one value at a time. The number of rows read is returned. values_read
+    // contains the number of non-null rows
+    int32_reader->Skip(loc-row_cnt);
+
+    int32_reader->ReadBatch(1, &definition_level, &repetition_level, &value, &values_read);
+    break;
+  }
+  std::cout << "value lookup for row "<<loc<<": "<< value << std::endl;
+
+
+}
+
+
+// load and read parquet file, parse into arrow and save with arrow feather.
+arrow::Status read_Parquet2ArrowDisk(std::string f_name, std::string comp, int comp_level = std::numeric_limits<int>::min()) {
 
   std::shared_ptr<arrow::io::ReadableFile> infile;
-  std::string f_name = "/mnt/dataset1/catalog_sales_sample";
   std::cout << f_name<<".parquet at once" << std::endl;
   PARQUET_ASSIGN_OR_THROW(
-          infile,
-          arrow::io::ReadableFile::Open(f_name+".parquet",
-                                        arrow::default_memory_pool()));
+          infile,arrow::io::ReadableFile::Open(Get_Parquet_File(f_name,comp),arrow::default_memory_pool()));
 
   std::unique_ptr<parquet::arrow::FileReader> reader;
   PARQUET_THROW_NOT_OK(
@@ -537,46 +594,170 @@ arrow::Status read_Parquet2Arrow_file() {
 
   PARQUET_ASSIGN_OR_THROW(
           outfile,
-          arrow::io::FileOutputStream::Open(f_name+".arrow"));
+          arrow::io::FileOutputStream::Open(f_name+"_"+comp+".arrow"));
+//          arrow::io::FileOutputStream::Open("/dev/null"));
 
-
-
-//  std::cout << "Loaded " << table->num_rows() << " rows in " << table->num_columns()
-//            << " columns." << std::endl;
-//  arrow::ipc::IpcWriteOptions ipc_options = arrow::ipc::IpcWriteOptions::Defaults();
-//  ipc_options.unify_dictionaries = true;
-//  ipc_options.allow_64bit = true;
-//  int64_t chunksize = 1LL << 16;
-
-//  arrow::Compression::type compression = arrow::Compression::GZIP;
-//  int compression_level = std::numeric_limits<int>::min();
-
-//  ARROW_ASSIGN_OR_RAISE(
-//          ipc_options.codec,
-//          arrow::util::Codec::Create(compression, compression_level));
   arrow::ipc::feather::WriteProperties prop = arrow::ipc::feather::WriteProperties::Defaults();
+  arrow::Compression::type compression;
+  ARROW_ASSIGN_OR_RAISE(compression, arrow::util::Codec::GetCompressionType(comp));
   prop.version = arrow::ipc::feather::kFeatherV2Version;
-  prop.compression = arrow::Compression::ZSTD;
-  prop.compression_level = 4 ;
+  prop.compression = compression;
+  if (comp_level!=std::numeric_limits<int>::min()){
+    prop.compression_level = comp_level;
+  }
+//  prop.compression = arrow::Compression::ZSTD;
+//  prop.compression_level = 4 ;
 
   std::cout<<"apply compression "<< prop.compression <<"with "<< prop.compression_level<<std::endl;
 
   ARROW_RETURN_NOT_OK(arrow::ipc::feather::WriteTable(*table, outfile.get(),prop));
 
-//  std::shared_ptr<arrow::ipc::RecordBatchWriter> writer;
-//  ARROW_ASSIGN_OR_RAISE(writer, MakeFileWriter(outfile, table->schema(), ipc_options));
-//  RETURN_NOT_OK(writer->WriteTable(*table, chunksize));
   return outfile->Close();
 }
 
+// load and read parquet file, parse into arrow and save with arrow feather in memory.
+arrow::Status read_Parquet2ArrowMem(std::string f_name, std::string comp, int comp_level = std::numeric_limits<int>::min()) {
 
-void read_whole_parquet_file() {
+  std::shared_ptr<arrow::io::ReadableFile> infile;
+  std::cout << f_name<<".parquet at once" << std::endl;
+  PARQUET_ASSIGN_OR_THROW(
+          infile,arrow::io::ReadableFile::Open(Get_Parquet_File(f_name,comp),arrow::default_memory_pool()));
+
+  std::unique_ptr<parquet::arrow::FileReader> reader;
+  PARQUET_THROW_NOT_OK(
+          parquet::arrow::OpenFile(infile, arrow::default_memory_pool(), &reader));
+  std::shared_ptr<arrow::Table> table;
+
+  PARQUET_THROW_NOT_OK(reader->ReadTable(&table));
+
+//  std::cout << "name " << table->schema()->ToString()  << std::endl;
+  std::shared_ptr<arrow::io::FileOutputStream> outfile;
+
+
+  PARQUET_ASSIGN_OR_THROW(
+          outfile,
+//          arrow::io::FileOutputStream::Open(f_name+"_"+comp+".arrow"));
+          arrow::io::FileOutputStream::Open("/dev/null"));
+
+  arrow::ipc::feather::WriteProperties prop = arrow::ipc::feather::WriteProperties::Defaults();
+  arrow::Compression::type compression;
+  ARROW_ASSIGN_OR_RAISE(compression, arrow::util::Codec::GetCompressionType(comp));
+  prop.version = arrow::ipc::feather::kFeatherV2Version;
+  prop.compression = compression;
+  if (comp_level!=std::numeric_limits<int>::min()){
+    prop.compression_level = comp_level;
+  }
+//  prop.compression = arrow::Compression::ZSTD;
+//  prop.compression_level = 4 ;
+
+  std::cout<<"apply compression "<< prop.compression <<"with "<< prop.compression_level<<std::endl;
+
+  ARROW_RETURN_NOT_OK(arrow::ipc::feather::WriteTable(*table, outfile.get(),prop));
+
+  return outfile->Close();
+}
+
+void read_feather_to_table(std::string path,std::shared_ptr<arrow::Table> *feather_table){
+
+  arrow::fs::LocalFileSystem file_system;
+  std::shared_ptr <arrow::io::RandomAccessFile> input_file = file_system.OpenInputFile(path).ValueOrDie();
+  std::shared_ptr <arrow::ipc::feather::Reader> feather_reader = arrow::ipc::feather::Reader::Open(input_file).ValueOrDie();
+  arrow::Status temp_status = feather_reader -> Read(feather_table);
+  if(temp_status.ok()){
+    std::cout << "Read feather file Successfully." << std::endl;
+//    std::cout << ((*feather_table)->schema()) -> ToString() << std::endl; // this line gives segfault
+  }
+  else{
+    std::cout << "Feather file reading process failed." << std::endl;
+  }
+  return;
+}
+
+
+void sum_feather2table(std::string f_name){
+  std::shared_ptr<arrow::Table> table;
+  read_feather_to_table(f_name, &table);
+  auto n_chunk = table->column(1)->num_chunks();
+  int sum = 0;
+  std::cout << "# of row: "<< table->num_rows() << std::endl;
+  std::cout << "# of chunk: "<< n_chunk<< std::endl;
+  for (int i=0;i<n_chunk;i++){
+    auto target_col =
+            std::static_pointer_cast<arrow::Int32Array>(table->column(1)->chunk(i));
+
+    for (int64_t idx = 0; idx < target_col->length(); idx++){
+      int val = target_col->Value(idx);
+      sum+=val;
+    }
+
+  }
+  std::cout << "sum feather: "<< sum<< std::endl;
+}
+
+
+void read_feather2table(std::string f_name){
+  std::shared_ptr<arrow::Table> table;
+  read_feather_to_table(f_name, &table);
+  auto n_chunk = table->column(1)->num_chunks();
+  int qualified = 0;
+  std::cout << "# of row: "<< table->num_rows() << std::endl;
+  std::cout << "# of chunk: "<< n_chunk<< std::endl;
+  for (int i=0;i<n_chunk;i++){
+    auto target_col =
+            std::static_pointer_cast<arrow::Int32Array>(table->column(1)->chunk(i));
+
+    for (int64_t idx = 0; idx < target_col->length(); idx++){
+
+      int val = target_col->Value(idx);
+      if (val>PRED){
+        qualified++;
+      }
+    }
+
+  }
+  std::cout << "number of value grater than "<<PRED<<": "<< qualified<< std::endl;
+}
+
+
+// lookup query on target column
+void lookup_feather2table(std::string f_name, int loc){
+
+
+  std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+  std::shared_ptr<arrow::Table> table;
+  read_feather_to_table(f_name, &table);
+  std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+  auto load_arrow = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
+  std::cout << "time elapsed in loading arrow: "<< load_arrow << std::endl;
+
+  auto n_chunk = table->column(1)->num_chunks();
+  int n_rows =table->num_rows();
+  std::cout << "# of row: "<< n_rows << std::endl;
+  assert(n_rows>loc);
+  std::cout << "# of chunk: "<< n_chunk<< std::endl;
+  int row_cnt = 0;
+  int val = 0;
+  for (int i=0;i<n_chunk;i++){
+    if (row_cnt+table->column(1)->chunk(i)->length()<loc+1){
+      row_cnt+=table->column(1)->chunk(i)->length();
+      continue;
+    }
+    auto target_col =
+            std::static_pointer_cast<arrow::Int32Array>(table->column(1)->chunk(i));
+    val = target_col->Value(loc-row_cnt);
+    break;
+  }
+  std::cout << "value lookup for row "<<loc<<": "<< val << std::endl;
+}
+
+
+
+void read_whole_parquet_file(std::string f_name) {
   std::cout << "Reading parquet at once" << std::endl;
   std::shared_ptr<arrow::io::ReadableFile> infile;
-  std::string f_name = "/mnt/dataset1/catalog_sales_sample";
   PARQUET_ASSIGN_OR_THROW(
           infile,
-          arrow::io::ReadableFile::Open(f_name+".parquet",
+          arrow::io::ReadableFile::Open(f_name,
                                         arrow::default_memory_pool()));
 
   std::unique_ptr<parquet::arrow::FileReader> reader;
@@ -590,13 +771,85 @@ void read_whole_parquet_file() {
             << " columns." << std::endl;
 }
 
-int main() {
+int main(int argc, char** argv) {
+  std::cout << "You have entered " << argc
+       << " arguments:" << "\n";
+
+  for (int i = 0; i < argc; ++i)
+    std::cout << argv[i] << "\n";
+
+  std::string f_name = argv[1];
+  std::string comp = argv[2];
+  int compression_level = std::numeric_limits<int>::min();
+  if (argc>3) {
+    compression_level = std::stoi (argv[3]);
+  }
+  std::cout << "compression " << comp
+            << " with level:"<< compression_level << "\n";
+
+
+
   std::cout << "Parquet Stream writing started." << std::endl;
-  WriteParquetFile();
-  std::cout << "Parquet Stream Reading started." << std::endl;
+  std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+  auto res = WriteParquetFile(f_name, comp,compression_level);
+  std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+  auto t_p_w = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
+
+  std::cout << "Writing Parquet to Arrow feather and save to disk." << std::endl;
+  begin = std::chrono::steady_clock::now();
+  read_Parquet2ArrowDisk(f_name,comp,compression_level);
+  end = std::chrono::steady_clock::now();
+  auto t_p2a_d = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
+
+  std::cout << "Writing Parquet to Arrow feather and save to m." << std::endl;
+  begin = std::chrono::steady_clock::now();
+  read_Parquet2ArrowMem(f_name,comp,compression_level);
+  end = std::chrono::steady_clock::now();
+  auto t_p2a_m = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
+
+  std::cout << "Filtering Parquet" << std::endl;
+  begin = std::chrono::steady_clock::now();
+  FilterParquetFile(Get_Parquet_File(f_name,comp));
+  end = std::chrono::steady_clock::now();
+  auto t_p_r = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
+
+  std::cout << "Filtering arrow" << std::endl;
+  begin = std::chrono::steady_clock::now();
+  read_feather2table(Get_Arrow_File(f_name,comp));
+  end = std::chrono::steady_clock::now();
+  auto t_a_r = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
+
+  std::cout << "sum parquet" << std::endl;
+  begin = std::chrono::steady_clock::now();
+  SumParquetFile(Get_Parquet_File(f_name,comp));
+  end = std::chrono::steady_clock::now();
+  auto t_p_s = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
+
+  std::cout << "sum arrow" << std::endl;
+  begin = std::chrono::steady_clock::now();
+  sum_feather2table(Get_Arrow_File(f_name,comp));
+  end = std::chrono::steady_clock::now();
+  auto t_a_s = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
+
+  std::cout << "Lookup parquet" << std::endl;
+  begin = std::chrono::steady_clock::now();
+  LookupParquetFile(Get_Parquet_File(f_name,comp),LOC);
+  end = std::chrono::steady_clock::now();
+  auto t_p_l = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
+
+  std::cout << "Lookup arrow" << std::endl;
+  begin = std::chrono::steady_clock::now();
+  lookup_feather2table(Get_Arrow_File(f_name,comp),LOC);
+  end = std::chrono::steady_clock::now();
+  auto t_a_l = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
+
+
+
+  std::cout << f_name<<","<<comp<<"," <<t_p_w<< "," << t_p2a_d<<"," << t_p2a_m<<","<<t_p_r<<","<<t_a_r<<","<<t_p_l<<","<<t_a_l <<","<<t_p_s<<","<<t_a_s << std::endl;
 //  ReadParquetFile();
-  read_Parquet2Arrow_file();
+//
+//  read_feather2table();
 //  read_whole_parquet_file();
-  std::cout << "Parsquet Stream Reading and Writing complete." << std::endl;
+  std::cout << "Parquet/Arrow Reading and Writing complete." << std::endl;
   return 0;
 }
