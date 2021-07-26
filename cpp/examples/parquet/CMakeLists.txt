@@ -19,7 +19,8 @@ add_executable(parquet_low_level_example low_level_api/reader_writer.cc)
 add_executable(parquet_low_level_example2 low_level_api/reader_writer2.cc)
 add_executable(parquet_arrow_example parquet_arrow/reader_writer.cc)
 add_executable(parquet_stream_api_example parquet_stream_api/stream_reader_writer.cc)
-add_executable(parquet_stream_tpsds_example parquet_stream_api/s_tpcds_reader_writer.cc)
+add_executable(parquet_stream_tpsds_example vegas/s_tpcds_reader_writer.cc)
+add_executable(parquet_arrow_projection_example vegas/projection_example.cc)
 target_include_directories(parquet_low_level_example PRIVATE low_level_api/)
 target_include_directories(parquet_low_level_example2 PRIVATE low_level_api/)
 
@@ -61,6 +62,7 @@ target_link_libraries(parquet_low_level_example ${PARQUET_EXAMPLE_LINK_LIBS})
 target_link_libraries(parquet_low_level_example2 ${PARQUET_EXAMPLE_LINK_LIBS})
 target_link_libraries(parquet_stream_api_example ${PARQUET_EXAMPLE_LINK_LIBS})
 target_link_libraries(parquet_stream_tpsds_example ${PARQUET_EXAMPLE_LINK_LIBS})
+target_link_libraries(parquet_arrow_projection_example ${PARQUET_EXAMPLE_LINK_LIBS})
 
 if(PARQUET_REQUIRE_ENCRYPTION)
   target_link_libraries(parquet_encryption_example ${PARQUET_EXAMPLE_LINK_LIBS})
@@ -72,7 +74,8 @@ add_dependencies(parquet
         parquet_low_level_example2
         parquet_arrow_example
         parquet_stream_api_example
-        parquet_stream_tpsds_example)
+        parquet_stream_tpsds_example
+        parquet_arrow_projection_example)
 
 if (PARQUET_REQUIRE_ENCRYPTION)
   add_dependencies(parquet
