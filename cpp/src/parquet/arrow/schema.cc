@@ -20,6 +20,7 @@
 #include <functional>
 #include <string>
 #include <vector>
+#include <iostream>
 
 #include "arrow/extension_type.h"
 #include "arrow/io/memory.h"
@@ -445,6 +446,7 @@ struct SchemaTreeContext {
 
 bool IsDictionaryReadSupported(const ArrowType& type) {
   // Only supported currently for BYTE_ARRAY types
+  std::cout<<"schema.cc --- Current arrow type: "<< type.ToString()<<std::endl;
   return type.id() == ::arrow::Type::BINARY || type.id() == ::arrow::Type::STRING;
 }
 

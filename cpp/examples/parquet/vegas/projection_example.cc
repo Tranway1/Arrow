@@ -14,41 +14,11 @@
 #include <parquet/column_reader.h>
 #include "arrow/table.h"
 #include "v_util.h"
+#include <fstream>
 #include "arrow/type_fwd.h"
 #include <arrow/api.h>
 
-void randperm(int* matrix, int size)
-{
-  std::random_shuffle(matrix, matrix + size);
-}
 
-
-
-int* genArray0ton(int n){
-  int* arr=new int[n];
-  int i = 0;
-  for (i = 0; i < n; i++) {
-    arr[i] = i;
-  }
-  return arr;
-}
-
-
-int* getRandomIdx(int n, float r){
-  int num = n*r;
-  int* arr = genArray0ton(n);
-  randperm(arr, n);
-  int* res=new int[num];
-  for (int i=0;i<num;i++){
-    res[i]=arr[i];
-//    std::cout << res[i] << " ";
-  }
-  std::sort(res,res+num);
-  std::cout << "res length"<<num<<std::endl;
-//  for (int i = 0; i < num; ++i)
-//    std::cout << res[i] << " ";
-  return res;
-}
 
 void ScanParquetFileWithIndices(std::string filename, int* array, int size) {
 
@@ -123,6 +93,9 @@ void ScanArrowFeatherWithIndices(std::string f_name, int* array, int size){
   auto load_arrow = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
   std::cout << "time elapsed in loading arrow: "<< load_arrow << std::endl;
 
+
+//  int64_t batch_size = properties().batch_size();
+
   std::chrono::steady_clock::time_point lbegin = std::chrono::steady_clock::now();
   auto n_chunk = table->column(0)->num_chunks();
   int n_rows =table->num_rows();
@@ -137,6 +110,7 @@ void ScanArrowFeatherWithIndices(std::string f_name, int* array, int size){
   int value = 0;
   for (int i=0;i<n_chunk;i++){
     int cur_rows=table->column(0)->chunk(i)->length();
+//    std::cout << "\t\t---# rows of current data chunk: "<< cur_rows<< std::endl;
     if (row_cnt+cur_rows<loc+1){
       row_cnt+=cur_rows;
       continue;
@@ -172,6 +146,83 @@ void ScanArrowFeatherWithIndices(std::string f_name, int* array, int size){
 
 
 
+
+
+
+
+void ScanArrowFeatherSkip(std::string f_name, int* array, int size){
+
+
+  std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+  int* converted_idx=new int[size];
+  std::set<int> extracted_chunks = extractChunks(array,size,converted_idx);
+  std::vector<int> chunks(extracted_chunks.size());
+  std::copy(extracted_chunks.begin(), extracted_chunks.end(),chunks.begin());
+
+  std::cout<<"chunk size:"<<chunks.size()<<std::endl;
+
+
+  std::shared_ptr<arrow::Table> table;
+  std::vector<int> vect{1};
+  read_feather_column_to_table(f_name, &table, vect, chunks);
+  std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+  auto load_arrow = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
+  std::cout << "time elapsed in loading arrow with skipping: "<< load_arrow << std::endl;
+
+
+//  int64_t batch_size = properties().batch_size();
+
+  std::chrono::steady_clock::time_point lbegin = std::chrono::steady_clock::now();
+  auto n_chunk = table->column(0)->num_chunks();
+  int n_rows =table->num_rows();
+  int idx = 0;
+  int loc = converted_idx[idx];
+  int32_t* res_array = new int32_t[size];
+
+  std::cout << "# of row: "<< n_rows << std::endl;
+  assert(n_rows>loc);
+  std::cout << "# of chunk: "<< n_chunk<< std::endl;
+  int row_cnt = 0;
+  int value = 0;
+  for (int i=0;i<n_chunk;i++){
+    int cur_rows=table->column(0)->chunk(i)->length();
+//    std::cout << "\t\t---# rows of current data chunk: "<< cur_rows<< std::endl;
+    if (row_cnt+cur_rows<loc+1){
+      row_cnt+=cur_rows;
+      continue;
+    }
+    auto target_col =
+            std::static_pointer_cast<arrow::Int32Array>(table->column(0)->chunk(i));
+
+    // if didn't finish current row group.
+    while (loc-row_cnt<cur_rows){
+      value = target_col->Value(loc-row_cnt);
+      res_array[idx]=value;
+      idx++;
+      if (idx==size){
+        break;
+      }
+      loc = converted_idx[idx];
+    }
+
+    if (idx==size){
+      break;
+    }
+    row_cnt+=cur_rows;
+  }
+
+  std::chrono::steady_clock::time_point lend = std::chrono::steady_clock::now();
+  auto lookup_arrow = std::chrono::duration_cast<std::chrono::milliseconds>(lend - lbegin).count();
+  std::cout << "time elapsed in lookup arrow: "<< lookup_arrow << std::endl;
+
+//  for (int i=0;i<size;i++){
+//    std::cout << "value lookup for row "<<array[i]<<": "<< res_array[i] << std::endl;
+//  }
+}
+
+
+
+
 int main(int argc, char** argv) {
   std::cout << "You have entered " << argc
             << " arguments:" << "\n";
@@ -183,6 +234,7 @@ int main(int argc, char** argv) {
   std::string comp = argv[2];
   float ratio = std::stof(argv[3]);
   int num=14401261;
+//  int num=1441548;
   std::cout << "lookup with ratio "<<ratio<<" on "<<f_name<<" with " <<comp << "\n";
 
   int *indices = getRandomIdx(num,ratio);
@@ -193,13 +245,22 @@ int main(int argc, char** argv) {
   auto end = std::chrono::steady_clock::now();
   auto t_p_l = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
 
+  ScanArrowFeatherWithIndices(Get_Arrow_File(f_name,comp),indices, num*ratio);
+
   std::cout << "----Lookup arrow" << std::endl;
   auto a_begin = std::chrono::steady_clock::now();
   ScanArrowFeatherWithIndices(Get_Arrow_File(f_name,comp),indices, num*ratio);
   auto a_end = std::chrono::steady_clock::now();
   auto t_a_l = std::chrono::duration_cast<std::chrono::milliseconds>(a_end - a_begin).count();
 
-  std::cout << "runtime: "<<t_p_l<<","<<t_a_l << std::endl;
+
+  std::cout << "----Lookup arrow with skip" << std::endl;
+  auto as_begin = std::chrono::steady_clock::now();
+  ScanArrowFeatherSkip(Get_Arrow_File(f_name,comp),indices, num*ratio);
+  auto as_end = std::chrono::steady_clock::now();
+  auto t_as_l = std::chrono::duration_cast<std::chrono::milliseconds>(as_end - as_begin).count();
+
+  std::cout << "runtime: "<< num*ratio <<","<<t_p_l<<","<<t_a_l << ","<<t_as_l << std::endl;
 
   return 0;
 }

@@ -95,6 +95,15 @@ class ARROW_EXPORT Reader {
   /// This function is zero-copy if the file source supports zero-copy reads
   virtual Status Read(const std::vector<std::string>& names,
                       std::shared_ptr<Table>* out) = 0;
+
+  /// \brief Read only the specified columns and data chunks from the file as an arrow::Table.
+  /// \author Chunwei Liu
+  /// \param[in] names the column names to read
+  /// \param[out] out the returned table
+  /// \return Status
+  ///
+  /// This function is zero-copy if the file source supports zero-copy reads
+  virtual Status Read(const std::vector<int>& indices, const std::vector<int>& chunks,std::shared_ptr<Table>* out) = 0;
 };
 
 struct ARROW_EXPORT WriteProperties {

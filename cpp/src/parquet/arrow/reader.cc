@@ -22,6 +22,7 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
+#include <iostream>
 
 #include "arrow/array.h"
 #include "arrow/buffer.h"
@@ -1201,6 +1202,7 @@ FileReaderBuilder* FileReaderBuilder::memory_pool(::arrow::MemoryPool* pool) {
 
 FileReaderBuilder* FileReaderBuilder::properties(
     const ArrowReaderProperties& arg_properties) {
+  std::cout<<"setup ArrowReaderProperties"<< std::endl;
   properties_ = arg_properties;
   return this;
 }
@@ -1214,6 +1216,13 @@ Status OpenFile(std::shared_ptr<::arrow::io::RandomAccessFile> file, MemoryPool*
   FileReaderBuilder builder;
   RETURN_NOT_OK(builder.Open(std::move(file)));
   return builder.memory_pool(pool)->Build(reader);
+}
+
+Status OpenFile(std::shared_ptr<::arrow::io::RandomAccessFile> file, MemoryPool* pool,
+                std::unique_ptr<FileReader>* reader,ArrowReaderProperties& arg_properties) {
+  FileReaderBuilder builder;
+  RETURN_NOT_OK(builder.Open(std::move(file)));
+  return builder.memory_pool(pool)->properties(arg_properties)->Build(reader);
 }
 
 namespace internal {

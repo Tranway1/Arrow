@@ -328,6 +328,15 @@ PARQUET_EXPORT
 
 /// @}
 
+
+
+PARQUET_EXPORT
+::arrow::Status OpenFile(std::shared_ptr<::arrow::io::RandomAccessFile>,
+                         ::arrow::MemoryPool* allocator,
+                         std::unique_ptr<FileReader>* reader, ArrowReaderProperties& arg_properties);
+
+
+
 PARQUET_EXPORT
 ::arrow::Status StatisticsAsScalars(const Statistics& Statistics,
                                     std::shared_ptr<::arrow::Scalar>* min,

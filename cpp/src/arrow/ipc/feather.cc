@@ -28,6 +28,7 @@
 #include <vector>
 
 #include <flatbuffers/flatbuffers.h>
+#include <iostream>
 
 #include "arrow/array.h"
 #include "arrow/buffer.h"
@@ -350,7 +351,7 @@ class ReaderV1 : public Reader {
   Status Read(const std::vector<int>& indices, std::shared_ptr<Table>* out) override {
     std::vector<std::shared_ptr<Field>> fields;
     std::vector<std::shared_ptr<ChunkedArray>> columns;
-
+    std::cout<<"****version1"<<std::endl;
     auto my_schema = this->schema();
     for (auto field_index : indices) {
       if (field_index < 0 || field_index >= my_schema->num_fields()) {
@@ -362,6 +363,14 @@ class ReaderV1 : public Reader {
     }
     *out = Table::Make(::arrow::schema(std::move(fields)), std::move(columns),
                        this->num_rows());
+    return Status::OK();
+  }
+
+  // chunwei : this is not implemented yet.
+  Status Read(const std::vector<int>& indices, const std::vector<int>& chunks,std::shared_ptr<Table>* out) override {
+    std::cout<<"using version 1 without chunk skipping support"<<std::endl;
+    auto options = IpcReadOptions::Defaults();
+    options.included_fields = indices;
     return Status::OK();
   }
 
@@ -726,15 +735,44 @@ class ReaderV2 : public Reader {
     return Table::FromRecordBatches(reader->schema(), batches).Value(out);
   }
 
+
+
   Status Read(std::shared_ptr<Table>* out) override {
     return Read(IpcReadOptions::Defaults(), out);
   }
 
   Status Read(const std::vector<int>& indices, std::shared_ptr<Table>* out) override {
+
+    std::cout <<"****version2"<<std::endl;
     auto options = IpcReadOptions::Defaults();
     options.included_fields = indices;
     return Read(options, out);
   }
+
+
+  // by Chunwwei
+  // enable target data chunks extraction.
+  Status Read(const IpcReadOptions& options, const std::vector<int>& chunks, std::shared_ptr<Table>* out) {
+    std::cout <<"****version2 with chunk skipping"<<std::endl;
+    ARROW_ASSIGN_OR_RAISE(auto reader, RecordBatchFileReader::Open(source_, options));
+    RecordBatchVector batches(chunks.size());
+
+//    assert((int)reader->num_record_batches()>=(int)chunks.size());
+    int size = (int)chunks.size();
+    for (auto i = 0; i < size; i++) {
+//      std::cout <<"\t\tread chunk id:"<<chunks[i]<<std::endl;
+      ARROW_ASSIGN_OR_RAISE(batches[i], reader->ReadRecordBatch(chunks[i]));
+    }
+    return Table::FromRecordBatches(reader->schema(), batches).Value(out);
+  }
+
+
+  Status Read(const std::vector<int>& indices, const std::vector<int>& chunks,std::shared_ptr<Table>* out) override {
+    auto options = IpcReadOptions::Defaults();
+    options.included_fields = indices;
+    return Read(options, chunks, out);
+  }
+
 
   Status Read(const std::vector<std::string>& names,
               std::shared_ptr<Table>* out) override {

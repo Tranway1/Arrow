@@ -42,6 +42,9 @@
 #include "arrow/table.h"
 #include "arrow/ipc/feather.h"
 #include <arrow/api.h>
+#include "arrow/dataset/file_parquet.h"
+#include "parquet/properties.h"
+
 #include "v_util.h"
 
 
@@ -609,7 +612,7 @@ void LookupParquetFile(std::string filename, int loc) {
 }
 
 
-// load and read parquet file, parse into arrow and save with arrow feather.
+// original version: load and read parquet file, parse into arrow and save with arrow feather.
 arrow::Status read_Parquet2ArrowDisk(std::string f_name, std::string comp, int comp_level = std::numeric_limits<int>::min()) {
 
   std::shared_ptr<arrow::io::ReadableFile> infile;
@@ -621,6 +624,74 @@ arrow::Status read_Parquet2ArrowDisk(std::string f_name, std::string comp, int c
   std::unique_ptr<parquet::arrow::FileReader> reader;
   PARQUET_THROW_NOT_OK(
           parquet::arrow::OpenFile(infile, arrow::default_memory_pool(), &reader));
+  std::shared_ptr<arrow::Table> table;
+
+  PARQUET_THROW_NOT_OK(reader->ReadTable(&table));
+
+//  std::cout << "name " << table->schema()->ToString()  << std::endl;
+  std::shared_ptr<arrow::io::FileOutputStream> outfile;
+
+
+  PARQUET_ASSIGN_OR_THROW(
+          outfile,
+          arrow::io::FileOutputStream::Open(f_name+"_"+comp+".arrow"));
+//          arrow::io::FileOutputStream::Open("/dev/null"));
+
+  std::string arrow_comp = comp;
+  if (comp.find("lz4") != std::string::npos){
+    std::cout<<"apply lz4_frame for arrow."<<std::endl;
+    arrow_comp = "lz4";
+  }
+
+  arrow::ipc::feather::WriteProperties prop = arrow::ipc::feather::WriteProperties::Defaults();
+  arrow::Compression::type compression;
+  ARROW_ASSIGN_OR_RAISE(compression, arrow::util::Codec::GetCompressionType(arrow_comp));
+  prop.version = arrow::ipc::feather::kFeatherV2Version;
+  prop.compression = compression;
+  if (comp_level!=std::numeric_limits<int>::min()){
+    prop.compression_level = comp_level;
+  }
+//  prop.compression = arrow::Compression::ZSTD;
+//  prop.compression_level = 4 ;
+
+  std::cout<<"apply compression "<< prop.compression <<"with "<< prop.compression_level<<std::endl;
+
+  ARROW_RETURN_NOT_OK(arrow::ipc::feather::WriteTable(*table, outfile.get(),prop));
+
+  return outfile->Close();
+}
+
+
+// load and read parquet file, parse into arrow with dictionary and save with arrow feather.
+arrow::Status Parquet2ArrowDict(std::string f_name, std::string comp, int comp_level = std::numeric_limits<int>::min()) {
+
+  std::shared_ptr<arrow::io::ReadableFile> infile;
+  std::cout << f_name<<".parquet at once" << std::endl;
+
+
+  PARQUET_ASSIGN_OR_THROW(
+          infile,arrow::io::ReadableFile::Open(Get_Parquet_File(f_name,comp),arrow::default_memory_pool()));
+
+  std::unique_ptr<parquet::ParquetFileReader> p_reader;
+  try {
+    p_reader = parquet::ParquetFileReader::Open(infile);
+  } catch (const ::parquet::ParquetException& e) {
+    return arrow::Status::IOError("Could not open parquet input source '", Get_Parquet_File(f_name,comp),
+                           "': ", e.what());
+  }
+
+  std::shared_ptr<parquet::FileMetaData> metadata = p_reader->metadata();
+  int n_col = metadata->num_columns();
+
+  parquet::ArrowReaderProperties arg_properties = parquet::default_arrow_reader_properties();
+  std::cout << "setting the arrow reader property with col num: " << n_col  << std::endl;
+  for (int i=0;i<n_col;i++){
+    arg_properties.set_read_dictionary(i,true);
+  }
+
+  std::unique_ptr<parquet::arrow::FileReader> reader;
+  PARQUET_THROW_NOT_OK(
+          parquet::arrow::OpenFile(infile, arrow::default_memory_pool(), &reader, arg_properties));
   std::shared_ptr<arrow::Table> table;
 
   PARQUET_THROW_NOT_OK(reader->ReadTable(&table));
@@ -881,13 +952,13 @@ int main(int argc, char** argv) {
 
   std::cout << "Parquet Stream writing started." << std::endl;
   std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
-//  auto res = WriteParquetFile(f_name, comp,compression_level);
+  auto res = WriteParquetFile(f_name, comp,compression_level);
   std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
   auto t_p_w = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
 
   std::cout << "Writing Parquet to Arrow feather and save to disk." << std::endl;
   begin = std::chrono::steady_clock::now();
-//  read_Parquet2ArrowDisk(f_name,comp,compression_level);
+  Parquet2ArrowDict(f_name,comp,compression_level);
   end = std::chrono::steady_clock::now();
   auto t_p2a_d = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
 

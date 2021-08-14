@@ -25,6 +25,7 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
+#include <iostream>
 
 #include <flatbuffers/flatbuffers.h>  // IWYU pragma: export
 
@@ -223,7 +224,6 @@ class ArrayLoader {
     // out what to do with the buffers. For example, if null_count == 0, then
     // we can skip that buffer without reading from shared memory
     RETURN_NOT_OK(GetFieldMetadata(field_index_++, out_));
-
     if (internal::HasValidityBitmap(type_id, metadata_version_)) {
       // Extract null_bitmap which is common to all arrays except for unions
       // and nulls.
@@ -501,6 +501,7 @@ Result<std::shared_ptr<RecordBatch>> LoadRecordBatchSubset(
   // because fields are mapped structurally (by path in the original schema).
   RETURN_NOT_OK(ResolveDictionaries(columns, *context.dictionary_memo,
                                     context.options.memory_pool));
+
 
   if (inclusion_mask) {
     filtered_schema = ::arrow::schema(std::move(filtered_fields), schema->metadata());
@@ -1066,6 +1067,7 @@ class RecordBatchFileReaderImpl : public RecordBatchFileReader {
     DCHECK_LT(i, num_record_batches());
 
     if (!read_dictionaries_) {
+
       RETURN_NOT_OK(ReadDictionaries());
       read_dictionaries_ = true;
     }
@@ -1079,6 +1081,8 @@ class RecordBatchFileReaderImpl : public RecordBatchFileReader {
                                           *message->metadata(), schema_,
                                           field_inclusion_mask_, context, reader.get()));
     ++stats_.num_record_batches;
+
+
     return batch;
   }
 
@@ -1202,6 +1206,8 @@ class RecordBatchFileReaderImpl : public RecordBatchFileReader {
   Status ReadDictionaries() {
     // Read all the dictionaries
     IpcReadContext context(&dictionary_memo_, options_, swap_endian_);
+
+    std::cout << "ipc/reader num dictionary: "<<  num_dictionaries() << std::endl;
     for (int i = 0; i < num_dictionaries(); ++i) {
       ARROW_ASSIGN_OR_RAISE(auto message, ReadMessageFromBlock(GetDictionaryBlock(i)));
       RETURN_NOT_OK(ReadOneDictionary(message.get(), context));
