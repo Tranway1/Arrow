@@ -3,8 +3,6 @@
 //
 
 #include <cstdint>
-#include <cstring>
-#include <gandiva/precompiled/types.h>
 #include <cassert>
 #include <algorithm>
 #include <iostream>

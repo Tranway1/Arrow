@@ -690,8 +690,9 @@ arrow::Status Parquet2ArrowDict(std::string f_name, std::string comp, int comp_l
   }
 
   std::unique_ptr<parquet::arrow::FileReader> reader;
+  // set arrow properties to enable dictionary encoding
   PARQUET_THROW_NOT_OK(
-          parquet::arrow::OpenFile(infile, arrow::default_memory_pool(), &reader, arg_properties));
+          parquet::arrow::OpenFile(infile, arrow::default_memory_pool(), &reader));
   std::shared_ptr<arrow::Table> table;
 
   PARQUET_THROW_NOT_OK(reader->ReadTable(&table));
