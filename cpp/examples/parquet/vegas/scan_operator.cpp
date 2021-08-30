@@ -11,7 +11,7 @@
 int main(){
 
   std::string f_name = "/mnt/dataset/catalog_sales";
-  std::string comp = "zstd";
+  std::string comp = "uncompressed";
 
 
   std::unique_ptr<parquet::ParquetFileReader> parquet_reader =
@@ -40,18 +40,18 @@ int main(){
   auto end = std::chrono::steady_clock::now();
   auto time_arrow = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
 
-  auto res_col = std::static_pointer_cast<arrow::Int32Array>(imme.result().at(0));
-  auto res_col1 = std::static_pointer_cast<arrow::Int32Array>(imme.result().at(1));
-  std::cout << "number of cols in result: " << imme.result().size() <<"length: "<< res_col->length()<<" and first val:"<< res_col->Value(0)<<" "<<res_col1->Value(0)<<std::endl;
+  auto res_col = std::static_pointer_cast<arrow::Int32Array>(imme.results().at(0));
+  auto res_col1 = std::static_pointer_cast<arrow::Int32Array>(imme.results().at(1));
+  std::cout << "number of cols in result: " << imme.results().size() <<"length: "<< res_col->length()<<" and first val:"<< res_col->Value(0)<<" "<<res_col1->Value(0)<<std::endl;
 
   std::cout << "start parquet scan-fitler: " << std::endl;
   begin = std::chrono::steady_clock::now();
   auto imme1 = ScanParquetFile(Get_Parquet_File(f_name,comp),  &projs, &filters, &ops, &opands);
   end = std::chrono::steady_clock::now();
   auto time_parquet = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
-  res_col = std::static_pointer_cast<arrow::Int32Array>(imme1.result().at(0));
-  res_col1 = std::static_pointer_cast<arrow::Int32Array>(imme1.result().at(1));
-  std::cout << "number of cols in result: " << imme1.result().size() <<"length: "<< res_col->length()<<" and first val:"<< res_col->Value(0)<<" "<<res_col1->Value(0)<<std::endl;
+  res_col = std::static_pointer_cast<arrow::Int32Array>(imme1.results().at(0));
+  res_col1 = std::static_pointer_cast<arrow::Int32Array>(imme1.results().at(1));
+  std::cout << "number of cols in result: " << imme1.results().size() <<"length: "<< res_col->length()<<" and first val:"<< res_col->Value(0)<<" "<<res_col1->Value(0)<<std::endl;
 
   std::cout << "Query run time arrow parquet: " << time_arrow<<","<< time_parquet<<std::endl;
 

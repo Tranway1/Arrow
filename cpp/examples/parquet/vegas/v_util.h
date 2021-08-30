@@ -5,7 +5,7 @@
 #include <arrow/filesystem/localfs.h>
 #include <arrow/ipc/api.h>
 #include <parquet/properties.h>
-#include<set>
+#include <set>
 
 #ifndef ARROW_V_UTIL_H
 #define ARROW_V_UTIL_H

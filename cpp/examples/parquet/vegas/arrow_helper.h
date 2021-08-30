@@ -37,7 +37,7 @@ public:
     IntermediateResult(IntermediateResult&&) = default;
     IntermediateResult& operator=(const IntermediateResult&) = default;
 
-    [[nodiscard]]  std::vector<std::shared_ptr<arrow::Array>>& result() { return results_; }
+    [[nodiscard]]  std::vector<std::shared_ptr<arrow::Array>>& results() { return results_; }
 
 private:
     std::vector<std::shared_ptr<arrow::Array>> results_;
@@ -916,7 +916,7 @@ IntermediateResult ScanArrowTable(std::string filename,  std::vector<int>* projs
     res.push_back(nullptr);
   }
   IntermediateResult im = IntermediateResult{res};
-  std::cout << "Num of col: " << im.result().size()<< std::endl;
+  std::cout << "Num of col: " << im.results().size()<< std::endl;
   // track qualified entries for filters and projections
   std::shared_ptr<arrow::Array> pre = nullptr;
 
@@ -995,7 +995,7 @@ IntermediateResult ScanArrowTable(std::string filename,  std::vector<int>* projs
          throw std::runtime_error(attr->name() + " type is not supported yet.");
 
     }
-    pre = cur_im.result().at(0);
+    pre = cur_im.results().at(0);
      std::cout << "finished filtering on "<<col_idx<< " with atrr "<<attr->name()<<": " << pre->length() << std::endl;
   }
 
@@ -1012,61 +1012,61 @@ IntermediateResult ScanArrowTable(std::string filename,  std::vector<int>* projs
       case arrow::Type::DOUBLE:
         if (pre==nullptr){
           IntermediateResult cur_proj = ScanArrowDouble(table->column(col_map[col_idx]), pre);
-          im.result().at(proj_map[col_idx]) = cur_proj.result().at(0);
+          im.results().at(proj_map[col_idx]) = cur_proj.results().at(0);
         }
         else if (pre->length()==0){
           std::shared_ptr<arrow::Array> val_array;
-          im.result().at(proj_map[col_idx]) = val_array;
+          im.results().at(proj_map[col_idx]) = val_array;
         }
         else {
           IntermediateResult cur_proj = ScanArrowDouble(table->column(col_map[col_idx]), pre);
-          im.result().at(proj_map[col_idx]) = cur_proj.result().at(0);
+          im.results().at(proj_map[col_idx]) = cur_proj.results().at(0);
         }
         break;
       case arrow::Type::INT32:
         if (pre==nullptr){
           IntermediateResult cur_proj = ScanArrowInt32(table->column(col_map[col_idx]), pre);
-          im.result().at(proj_map[col_idx]) = cur_proj.result().at(0);
+          im.results().at(proj_map[col_idx]) = cur_proj.results().at(0);
         }
         else if (pre->length()==0){
           std::shared_ptr<arrow::Array> val_array;
-          im.result().at(proj_map[col_idx]) = val_array;
+          im.results().at(proj_map[col_idx]) = val_array;
         }
         else {
           IntermediateResult cur_proj = ScanArrowInt32(table->column(col_map[col_idx]), pre);
           std::cout << "col idx: " << col_idx<< " idx in result set "<< col_map[col_idx] << std::endl;
-          im.result().at(proj_map[col_idx]) = cur_proj.result().at(0);
+          im.results().at(proj_map[col_idx]) = cur_proj.results().at(0);
         }
         break;
       case arrow::Type::STRING:
         if (pre==nullptr){
           IntermediateResult cur_proj = ScanArrowString(table->column(col_map[col_idx]), pre);
-          im.result().at(proj_map[col_idx]) = cur_proj.result().at(0);
+          im.results().at(proj_map[col_idx]) = cur_proj.results().at(0);
         }
         else if (pre->length()==0){
           std::shared_ptr<arrow::Array> val_array;
-          im.result().at(proj_map[col_idx]) = val_array;
+          im.results().at(proj_map[col_idx]) = val_array;
         }
         else {
           IntermediateResult cur_proj = ScanArrowString(table->column(col_map[col_idx]), pre);
           std::cout << "col idx: " << col_idx<< " idx in result set "<< col_map[col_idx] << std::endl;
-          im.result().at(proj_map[col_idx]) = cur_proj.result().at(0);
+          im.results().at(proj_map[col_idx]) = cur_proj.results().at(0);
         }
         break;
 
       case arrow::Type::DICTIONARY:
         if (pre==nullptr){
           IntermediateResult cur_proj = ScanArrowDict(table->column(col_map[col_idx]), pre);
-          im.result().at(proj_map[col_idx]) = cur_proj.result().at(0);
+          im.results().at(proj_map[col_idx]) = cur_proj.results().at(0);
         }
         else if (pre->length()==0){
           std::shared_ptr<arrow::Array> val_array;
-          im.result().at(proj_map[col_idx]) = val_array;
+          im.results().at(proj_map[col_idx]) = val_array;
         }
         else {
           IntermediateResult cur_proj = ScanArrowDict(table->column(col_map[col_idx]), pre);
           std::cout << "col idx: " << col_idx<< " idx in result set "<< col_map[col_idx] << std::endl;
-          im.result().at(proj_map[col_idx]) = cur_proj.result().at(0);
+          im.results().at(proj_map[col_idx]) = cur_proj.results().at(0);
         }
         break;
       default:

@@ -559,7 +559,7 @@ IntermediateResult ScanParquetFile(std::string filename,  std::vector<int>* proj
     res.push_back(nullptr);
   }
   IntermediateResult im = IntermediateResult{res};
-  std::cout << "Num of col: " << im.result().size()<< std::endl;
+  std::cout << "Num of col: " << im.results().size()<< std::endl;
   // track qualified entries for filters and projections
   std::shared_ptr<arrow::Array> pre = nullptr;
 
@@ -628,7 +628,7 @@ IntermediateResult ScanParquetFile(std::string filename,  std::vector<int>* proj
         throw std::runtime_error(TypeToString(attr) + " type is not supported yet.");
 
     }
-    pre = cur_im.result().at(0);
+    pre = cur_im.results().at(0);
     std::cout << "finished filtering on "<<col_idx<< " with atrr "<<TypeToString(attr) <<": " << pre->length() << std::endl;
   }
 
@@ -644,15 +644,15 @@ IntermediateResult ScanParquetFile(std::string filename,  std::vector<int>* proj
     switch (attr) {
       case parquet::Type::type::DOUBLE:
         cur_proj = ScanParquetDouble(parquet_reader, col_idx,pre);
-        im.result().at(proj_map[col_idx]) = cur_proj.result().at(0);
+        im.results().at(proj_map[col_idx]) = cur_proj.results().at(0);
         break;
       case parquet::Type::type::INT32:
         cur_proj = ScanParquetInt(parquet_reader, col_idx,pre);
-        im.result().at(proj_map[col_idx]) = cur_proj.result().at(0);
+        im.results().at(proj_map[col_idx]) = cur_proj.results().at(0);
         break;
       case parquet::Type::type::BYTE_ARRAY:
         cur_proj = ScanParquetString(parquet_reader, col_idx,pre);
-        im.result().at(proj_map[col_idx]) = cur_proj.result().at(0);
+        im.results().at(proj_map[col_idx]) = cur_proj.results().at(0);
         break;
       default:
         throw std::runtime_error(TypeToString(attr) + " type is not supported yet.");
@@ -660,6 +660,7 @@ IntermediateResult ScanParquetFile(std::string filename,  std::vector<int>* proj
 
 
   }
+
   return im;
 }
 
