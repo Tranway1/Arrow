@@ -22,6 +22,8 @@ add_executable(parquet_stream_api_example parquet_stream_api/stream_reader_write
 add_executable(parquet_stream_tpsds_example vegas/s_tpcds_reader_writer.cc)
 add_executable(parquet_arrow_projection_example vegas/projection_example.cc vegas/v_util.h)
 add_executable(parquet_arrow_vegas vegas/gandiva_example.cpp vegas/v_util.h )
+add_executable(parquet_arrow_dictionary_example vegas/dictionary_filtering_example.cc)
+add_executable(scan_example vegas/scan_operator.cpp vegas/v_util.h vegas/arrow_helper.h vegas/parquet_helper.h)
 target_include_directories(parquet_low_level_example PRIVATE low_level_api/)
 target_include_directories(parquet_low_level_example2 PRIVATE low_level_api/)
 
@@ -64,6 +66,9 @@ target_link_libraries(parquet_low_level_example2 ${PARQUET_EXAMPLE_LINK_LIBS})
 target_link_libraries(parquet_stream_api_example ${PARQUET_EXAMPLE_LINK_LIBS})
 target_link_libraries(parquet_stream_tpsds_example ${PARQUET_EXAMPLE_LINK_LIBS})
 target_link_libraries(parquet_arrow_projection_example ${PARQUET_EXAMPLE_LINK_LIBS})
+target_link_libraries(parquet_arrow_dictionary_example ${PARQUET_EXAMPLE_LINK_LIBS})
+target_link_libraries(scan_example ${PARQUET_EXAMPLE_LINK_LIBS})
+
 
 if(PARQUET_REQUIRE_ENCRYPTION)
   target_link_libraries(parquet_encryption_example ${PARQUET_EXAMPLE_LINK_LIBS})
@@ -76,7 +81,10 @@ add_dependencies(parquet
         parquet_arrow_example
         parquet_stream_api_example
         parquet_stream_tpsds_example
-        parquet_arrow_projection_example)
+        parquet_arrow_projection_example
+        parquet_arrow_dictionary_example
+        scan_example)
+
 
 if (PARQUET_REQUIRE_ENCRYPTION)
   add_dependencies(parquet

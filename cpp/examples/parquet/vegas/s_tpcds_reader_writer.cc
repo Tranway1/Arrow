@@ -46,6 +46,8 @@
 #include "parquet/properties.h"
 
 #include "v_util.h"
+#include "arrow_helper.h"
+#include "parquet_helper.h"
 
 
 using arrow::DoubleBuilder;
@@ -953,13 +955,13 @@ int main(int argc, char** argv) {
 
   std::cout << "Parquet Stream writing started." << std::endl;
   std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
-  auto res = WriteParquetFile(f_name, comp,compression_level);
+//  auto res = WriteParquetFile(f_name, comp,compression_level);
   std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
   auto t_p_w = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
 
   std::cout << "Writing Parquet to Arrow feather and save to disk." << std::endl;
   begin = std::chrono::steady_clock::now();
-  Parquet2ArrowDict(f_name,comp,compression_level);
+//  read_Parquet2ArrowDisk(f_name,comp,compression_level);
   end = std::chrono::steady_clock::now();
   auto t_p2a_d = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
 
@@ -974,8 +976,8 @@ int main(int argc, char** argv) {
   std::ofstream ofs("/proc/sys/vm/drop_caches");
   ofs << "3" << std::endl;
 
-  SumParquetFile(Get_Parquet_File(f_name,comp));
-  read_feather2table(Get_Arrow_File(f_name,comp));
+//  SumParquetFile(Get_Parquet_File(f_name,comp));
+//  read_feather2table(Get_Arrow_File(f_name,comp));
 
 
 //  sync();
@@ -985,7 +987,7 @@ int main(int argc, char** argv) {
 
   std::cout << "----Filtering Parquet" << std::endl;
   begin = std::chrono::steady_clock::now();
-  FilterParquetFile(Get_Parquet_File(f_name,comp));
+//  FilterParquetFile(Get_Parquet_File(f_name,comp));
   end = std::chrono::steady_clock::now();
   auto t_p_r = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
 
@@ -1001,13 +1003,13 @@ int main(int argc, char** argv) {
 
   std::cout << "----sum parquet" << std::endl;
   begin = std::chrono::steady_clock::now();
-  SumParquetFile(Get_Parquet_File(f_name,comp));
+//  SumParquetFile(Get_Parquet_File(f_name,comp));
   end = std::chrono::steady_clock::now();
   auto t_p_s = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
 
   std::cout << "====sum arrow" << std::endl;
   begin = std::chrono::steady_clock::now();
-  sum_feather2table(Get_Arrow_File(f_name,comp));
+//  sum_feather2table(Get_Arrow_File(f_name,comp));
   end = std::chrono::steady_clock::now();
   auto t_a_s = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
 
@@ -1016,17 +1018,15 @@ int main(int argc, char** argv) {
 
   std::cout << "----Lookup parquet" << std::endl;
   begin = std::chrono::steady_clock::now();
-  LookupParquetFile(Get_Parquet_File(f_name,comp),LOC);
+//  LookupParquetFile(Get_Parquet_File(f_name,comp),LOC);
   end = std::chrono::steady_clock::now();
   auto t_p_l = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
 
   std::cout << "====Lookup arrow" << std::endl;
   begin = std::chrono::steady_clock::now();
-  lookup_feather2table(Get_Arrow_File(f_name,comp),LOC);
+//  lookup_feather2table(Get_Arrow_File(f_name,comp),LOC);
   end = std::chrono::steady_clock::now();
   auto t_a_l = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
-
-
 
   std::cout << f_name<<","<<comp<<"," <<t_p_w<< "," << t_p2a_d<<"," << t_p2a_m<<","<<t_p_r<<","<<t_a_r<<","<<t_p_l<<","<<t_a_l <<","<<t_p_s<<","<<t_a_s << std::endl;
 //  ReadParquetFile();
