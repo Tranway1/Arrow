@@ -546,12 +546,17 @@ IntermediateResult ScanParquetString(std::shared_ptr<parquet::ParquetFileReader>
 IntermediateResult ScanParquetFile(std::string filename,  std::vector<int>* projs,  std::vector<int>* filters,
                                   std::vector<std::string>* ops, std::vector<std::string>* opands){
 
+
+  auto begin = std::chrono::steady_clock::now();
   std::shared_ptr<parquet::ParquetFileReader> parquet_reader =
           parquet::ParquetFileReader::OpenFile(filename, false);
+  auto end = std::chrono::steady_clock::now();
+  auto t_load = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
   auto cols = UnionVector(projs, filters);
   auto schema = parquet_reader->metadata()->schema();
 
-  std::cout << "Num of col: " << schema->num_columns()<< std::endl;
+  std::cout << "==Num of col: " << schema->num_columns()<<" and parquet loading time: "<< t_load<< std::endl;
+
   std::vector<std::shared_ptr<arrow::Array>> res;
   std::unordered_map<int, int> proj_map;
   for (auto i=0;i < (int)projs->size();i++){
@@ -569,7 +574,7 @@ IntermediateResult ScanParquetFile(std::string filename,  std::vector<int>* proj
     auto col_idx = filters->at(findex);
     bool is_proj = IsProj(col_idx, projs);
 
-    std::cout << "is projected: " << is_proj << std::endl;
+//    std::cout << "is projected: " << is_proj << std::endl;
 
     std::string predicate;
     auto attr = schema->Column(col_idx)->physical_type();

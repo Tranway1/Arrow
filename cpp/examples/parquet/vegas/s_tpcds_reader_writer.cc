@@ -44,10 +44,7 @@
 #include <arrow/api.h>
 #include "arrow/dataset/file_parquet.h"
 #include "parquet/properties.h"
-
 #include "v_util.h"
-#include "arrow_helper.h"
-#include "parquet_helper.h"
 
 
 using arrow::DoubleBuilder;
@@ -955,13 +952,13 @@ int main(int argc, char** argv) {
 
   std::cout << "Parquet Stream writing started." << std::endl;
   std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
-//  auto res = WriteParquetFile(f_name, comp,compression_level);
+  auto res = WriteParquetFile(f_name, comp,compression_level);
   std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
   auto t_p_w = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
 
   std::cout << "Writing Parquet to Arrow feather and save to disk." << std::endl;
   begin = std::chrono::steady_clock::now();
-//  read_Parquet2ArrowDisk(f_name,comp,compression_level);
+  read_Parquet2ArrowDisk(f_name,comp,compression_level);
   end = std::chrono::steady_clock::now();
   auto t_p2a_d = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
 

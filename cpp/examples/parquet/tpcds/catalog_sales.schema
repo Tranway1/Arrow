@@ -16,7 +16,7 @@
   cs_item_sk                integer,
   cs_promo_sk               integer,
   cs_order_number           bigint,
-  cs_quantity               varchar(10),
+  cs_quantity               integer,
   cs_wholesale_cost         decimal(7,2),
   cs_list_price             decimal(7,2),
   cs_sales_price            decimal(7,2),

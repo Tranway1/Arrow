@@ -17,6 +17,14 @@
 #include <set>
 #include <iostream>
 #include "v_util.h"
+#include <parquet/arrow/reader.h>
+#include <iostream>
+#include <chrono>
+#include <parquet/arrow/reader.h>
+#include <parquet/exception.h>
+#include <arrow/io/file.h>
+#include <arrow/api.h>
+#include "arrow/chunked_array.h"
 
 class IntermediateResult {
 public:
@@ -447,6 +455,7 @@ template<class T>
   auto base = 0;
   auto cur_num = 0;
 
+  std::cout<<"nbatches: "<<n_chunks<<std::endl;
 
   if (pre == nullptr){
     for (auto i=0;i<n_chunks;i++){
@@ -464,7 +473,8 @@ template<class T>
   }
 
 
-  auto bv = pre->data();
+
+  auto bv = std::static_pointer_cast<arrow::Int64Array>(pre);
   auto mark = 0;
 
   for (auto i=0;i<n_chunks;i++){
@@ -472,8 +482,8 @@ template<class T>
     cur_num = cur_array->length();
     std::vector<int64_t> local_bv;
 
-    while (mark<pre->length() && (int64_t)bv->GetValues<int64_t>(mark) < base+cur_num){
-      local_bv.push_back((int64_t)bv->GetValues<int64_t>(mark));
+    while (mark<pre->length() && bv->Value(mark) < base+cur_num){
+      local_bv.push_back(bv->Value(mark));
       mark++;
     }
 
@@ -694,14 +704,14 @@ IntermediateResult ScanArrowDouble(std::shared_ptr<arrow::ChunkedArray> c_array,
   }
 
   auto mark = 0;
-  auto bv = pre->data();
+  auto bv = std::static_pointer_cast<arrow::Int64Array>(pre);
   for (auto i=0;i<n_chunks;i++){
     auto cur_array = c_array->chunk(i);
     cur_num = cur_array->length();
     std::vector<int64_t> local_bv;
 
-    while (mark<pre->length() && (int64_t)bv->GetValues<int64_t>(mark) < base+cur_num){
-      local_bv.push_back((int64_t)bv->GetValues<int64_t>(mark));
+    while (mark<pre->length() && bv->Value(mark) < base+cur_num){
+      local_bv.push_back(bv->Value(mark));
       mark++;
     }
 
@@ -904,11 +914,13 @@ IntermediateResult ScanArrowTable(std::string filename,  std::vector<int>* projs
     std::cout <<col<< "---" << count<< std::endl;
     count++;
   }
-
+  auto begin = std::chrono::steady_clock::now();
   read_feather_column_to_table(filename, &table, cols);
+  auto end = std::chrono::steady_clock::now();
+  auto t_load = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
   auto schema = table->schema();
 
-  std::cout << "Num of col: " << schema->num_fields()<< std::endl;
+  std::cout << "==Num of col: " << schema->num_fields() <<" and arrow loading time: "<< t_load<< std::endl;
   std::vector<std::shared_ptr<arrow::Array>> res;
   std::unordered_map<int, int> proj_map;
   for (auto i=0;i < (int)projs->size();i++){
@@ -928,7 +940,7 @@ IntermediateResult ScanArrowTable(std::string filename,  std::vector<int>* projs
     auto col_idx = filters->at(findex);
     bool is_proj = IsProj(col_idx, projs);
 
-    std::cout << "is projected: " << is_proj << std::endl;
+//    std::cout << "is projected: " << is_proj << std::endl;
 
     std::string predicate;
     auto attr = schema->field(col_map[col_idx])->type();
@@ -977,6 +989,7 @@ IntermediateResult ScanArrowTable(std::string filename,  std::vector<int>* projs
          break;
        case arrow::Type::STRING:
          predicate = opands->at(findex);
+         std::cout<< "string oprand: "<< predicate<<std::endl;
          if (ops->at(findex) == "EQUAL")
            cur_im = FilterChunkedArray(table->column(col_map[col_idx]),  predicate,
                                        strEqual, is_proj,  pre);
@@ -985,6 +998,7 @@ IntermediateResult ScanArrowTable(std::string filename,  std::vector<int>* projs
          break;
        case arrow::Type::DICTIONARY:
          predicate = opands->at(findex);
+         std::cout<< "dictionary oprand: "<< predicate<<std::endl;
          if (ops->at(findex) == "EQUAL")
            cur_im = FilterDictChunkedArray(table->column(col_map[col_idx]),  predicate,
                                        intEqual, is_proj,  pre);
@@ -996,7 +1010,7 @@ IntermediateResult ScanArrowTable(std::string filename,  std::vector<int>* projs
 
     }
     pre = cur_im.results().at(0);
-     std::cout << "finished filtering on "<<col_idx<< " with atrr "<<attr->name()<<": " << pre->length() << std::endl;
+     std::cout << "finished filtering on "<<col_idx<< " with attr "<<attr->name()<<": " << pre->length() << std::endl;
   }
 
   std::cout << "finished filtering: " << pre->length() << std::endl;
@@ -1079,6 +1093,204 @@ IntermediateResult ScanArrowTable(std::string filename,  std::vector<int>* projs
 
 
 
+IntermediateResult ScanParquetTable(std::string filename,  std::vector<int>* projs,  std::vector<int>* filters,
+                                  std::vector<std::string>* ops, std::vector<std::string>* opands){
+  std::shared_ptr<arrow::Table> table;
+  auto cols = UnionVector(projs, filters);
+
+  std::unordered_map<int, int> col_map;
+  int count = 0;
+  for (int col: cols){
+    col_map[col]=count;
+    std::cout <<col<< "---" << count<< std::endl;
+    count++;
+  }
+  auto begin = std::chrono::steady_clock::now();
+  arrow::MemoryPool* pool = arrow::default_memory_pool();
+  std::shared_ptr<arrow::io::RandomAccessFile> input = arrow::io::ReadableFile::Open(filename).ValueOrDie();
+  std::unique_ptr<parquet::arrow::FileReader> arrow_reader;
+  auto status = parquet::arrow::OpenFile(input, pool, &arrow_reader);
+  status = arrow_reader->ReadTable(cols, &table);
+
+//  read_feather_column_to_table(filename, &table, cols);
+  auto end = std::chrono::steady_clock::now();
+  auto t_load = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
+  auto schema = table->schema();
+
+  std::cout << "==Num of col: " << schema->num_fields() <<" and arrow loading time: "<< t_load<< std::endl;
+  std::vector<std::shared_ptr<arrow::Array>> res;
+  std::unordered_map<int, int> proj_map;
+  for (auto i=0;i < (int)projs->size();i++){
+    proj_map[projs->at(i)]=i;
+    res.push_back(nullptr);
+  }
+  IntermediateResult im = IntermediateResult{res};
+  std::cout << "Num of col: " << im.results().size()<< std::endl;
+  // track qualified entries for filters and projections
+  std::shared_ptr<arrow::Array> pre = nullptr;
+
+
+
+  // start filtering first
+  for (auto findex = 0; findex < (int)filters->size();findex++){
+    IntermediateResult cur_im;
+    auto col_idx = filters->at(findex);
+    bool is_proj = IsProj(col_idx, projs);
+
+//    std::cout << "is projected: " << is_proj << std::endl;
+
+    std::string predicate;
+    auto attr = schema->field(col_map[col_idx])->type();
+    switch (attr->id()) {
+
+      case arrow::Type::DOUBLE:
+        predicate = opands->at(findex);
+        if (ops->at(findex) == "EQUAL"){
+          cur_im = FilterChunkedArray(table->column(col_map[col_idx]), std::stod(predicate),
+                                      doubleEqual, is_proj,  pre);
+        }
+        else if (ops->at(findex) == "GREATER"){
+          cur_im = FilterChunkedArray(table->column(col_map[col_idx]), std::stod(predicate),
+                                      doubleGreater, is_proj,  pre);
+        }
+        else if (ops->at(findex) == "GREATER_EQUAL"){
+          cur_im = FilterChunkedArray(table->column(col_map[col_idx]), std::stod(predicate),
+                                      doubleGE, is_proj,  pre);
+        }
+        else if (ops->at(findex) == "LESS"){
+          cur_im = FilterChunkedArray(table->column(col_map[col_idx]), std::stod(predicate),
+                                      doubleLess, is_proj,  pre);
+        }
+        else if (ops->at(findex) == "LESS_EQUAL"){
+          cur_im = FilterChunkedArray(table->column(col_map[col_idx]), std::stod(predicate),
+                                      doubleLE, is_proj,  pre);
+        }
+        break;
+      case arrow::Type::INT32:
+        predicate = opands->at(findex);
+        if (ops->at(findex) == "EQUAL")
+          cur_im = FilterChunkedArray(table->column(col_map[col_idx]),  std::stoi(predicate),
+                                      intEqual, is_proj,  pre);
+        else if (ops->at(findex) == "GREATER")
+          cur_im = FilterChunkedArray(table->column(col_map[col_idx]),  std::stoi(predicate),
+                                      intGreater, is_proj,  pre);
+        else if (ops->at(findex) == "GREATER_EQUAL")
+          cur_im = FilterChunkedArray(table->column(col_map[col_idx]),  std::stoi(predicate),
+                                      intGE, is_proj,  pre);
+        else if (ops->at(findex) == "LESS_EQUAL")
+          cur_im = FilterChunkedArray(table->column(col_map[col_idx]),  std::stoi(predicate),
+                                      intLE, is_proj,  pre);
+        else if (ops->at(findex) == "LESS")
+          cur_im = FilterChunkedArray(table->column(col_map[col_idx]),  std::stoi(predicate),
+                                      intLess, is_proj,  pre);
+        break;
+      case arrow::Type::STRING:
+        predicate = opands->at(findex);
+        std::cout<< "string oprand: "<< predicate<<std::endl;
+        if (ops->at(findex) == "EQUAL")
+          cur_im = FilterChunkedArray(table->column(col_map[col_idx]),  predicate,
+                                      strEqual, is_proj,  pre);
+        else
+          throw std::runtime_error(ops->at(findex) + " operator is not supported for string yet.");
+        break;
+      case arrow::Type::DICTIONARY:
+        predicate = opands->at(findex);
+        std::cout<< "dictionary oprand: "<< predicate<<std::endl;
+        if (ops->at(findex) == "EQUAL")
+          cur_im = FilterDictChunkedArray(table->column(col_map[col_idx]),  predicate,
+                                          intEqual, is_proj,  pre);
+        else
+          throw std::runtime_error(ops->at(findex) + " operator is not supported for string yet.");
+        break;
+      default:
+        throw std::runtime_error(attr->name() + " type is not supported yet.");
+
+    }
+    pre = cur_im.results().at(0);
+    std::cout << "finished filtering on "<<col_idx<< " with attr "<<attr->name()<<": " << pre->length() << std::endl;
+  }
+
+  std::cout << "finished filtering: " << pre->length() << std::endl;
+
+  // then handle projection col
+  for (auto pindex = 0; pindex < (int)projs->size();pindex++){
+    IntermediateResult cur_im;
+    auto col_idx = projs->at(pindex);
+    auto attr = schema->field(col_map[col_idx])->type();
+    std::cout << "pre length: " << pre->length() << std::endl;
+    std::cout << "index of map: " << col_map[col_idx] << std::endl;
+    switch (attr->id()) {
+      case arrow::Type::DOUBLE:
+        if (pre==nullptr){
+          IntermediateResult cur_proj = ScanArrowDouble(table->column(col_map[col_idx]), pre);
+          im.results().at(proj_map[col_idx]) = cur_proj.results().at(0);
+        }
+        else if (pre->length()==0){
+          std::shared_ptr<arrow::Array> val_array;
+          im.results().at(proj_map[col_idx]) = val_array;
+        }
+        else {
+          IntermediateResult cur_proj = ScanArrowDouble(table->column(col_map[col_idx]), pre);
+          im.results().at(proj_map[col_idx]) = cur_proj.results().at(0);
+        }
+        break;
+      case arrow::Type::INT32:
+        if (pre==nullptr){
+          IntermediateResult cur_proj = ScanArrowInt32(table->column(col_map[col_idx]), pre);
+          im.results().at(proj_map[col_idx]) = cur_proj.results().at(0);
+        }
+        else if (pre->length()==0){
+          std::shared_ptr<arrow::Array> val_array;
+          im.results().at(proj_map[col_idx]) = val_array;
+        }
+        else {
+          IntermediateResult cur_proj = ScanArrowInt32(table->column(col_map[col_idx]), pre);
+          std::cout << "col idx: " << col_idx<< " idx in result set "<< col_map[col_idx] << std::endl;
+          im.results().at(proj_map[col_idx]) = cur_proj.results().at(0);
+        }
+        break;
+      case arrow::Type::STRING:
+        if (pre==nullptr){
+          IntermediateResult cur_proj = ScanArrowString(table->column(col_map[col_idx]), pre);
+          im.results().at(proj_map[col_idx]) = cur_proj.results().at(0);
+        }
+        else if (pre->length()==0){
+          std::shared_ptr<arrow::Array> val_array;
+          im.results().at(proj_map[col_idx]) = val_array;
+        }
+        else {
+          IntermediateResult cur_proj = ScanArrowString(table->column(col_map[col_idx]), pre);
+          std::cout << "col idx: " << col_idx<< " idx in result set "<< col_map[col_idx] << std::endl;
+          im.results().at(proj_map[col_idx]) = cur_proj.results().at(0);
+        }
+        break;
+
+      case arrow::Type::DICTIONARY:
+        if (pre==nullptr){
+          IntermediateResult cur_proj = ScanArrowDict(table->column(col_map[col_idx]), pre);
+          im.results().at(proj_map[col_idx]) = cur_proj.results().at(0);
+        }
+        else if (pre->length()==0){
+          std::shared_ptr<arrow::Array> val_array;
+          im.results().at(proj_map[col_idx]) = val_array;
+        }
+        else {
+          IntermediateResult cur_proj = ScanArrowDict(table->column(col_map[col_idx]), pre);
+          std::cout << "col idx: " << col_idx<< " idx in result set "<< col_map[col_idx] << std::endl;
+          im.results().at(proj_map[col_idx]) = cur_proj.results().at(0);
+        }
+        break;
+      default:
+        throw std::runtime_error(attr->name() + " type is not supported yet.");
+    }
+
+  }
+  return im;
+}
+
+
+
+
 template<class T>
         void FilterDataChunkOnePass(arrow::DoubleArray* chunk, arrow::Int64Builder& idx_builder,
                                     arrow::DoubleBuilder& val_builder, double pred, T func, bool projected = false,
@@ -1146,7 +1358,6 @@ template<class T>
   double val = 0.0;
 
   auto n_chunk = table->column(0)->num_chunks();
-
   for (int i=0;i<n_chunk;i++){
     auto target_col =
             std::static_pointer_cast<arrow::DoubleArray>(table->column(0)->chunk(i));
