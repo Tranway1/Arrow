@@ -691,7 +691,7 @@ arrow::Status Parquet2ArrowDict(std::string f_name, std::string comp, int comp_l
   std::unique_ptr<parquet::arrow::FileReader> reader;
   // set arrow properties to enable dictionary encoding
   PARQUET_THROW_NOT_OK(
-          parquet::arrow::OpenFile(infile, arrow::default_memory_pool(), &reader));
+          parquet::arrow::OpenFile(infile, arrow::default_memory_pool(), &reader, arg_properties));
   std::shared_ptr<arrow::Table> table;
 
   PARQUET_THROW_NOT_OK(reader->ReadTable(&table));
@@ -952,7 +952,7 @@ int main(int argc, char** argv) {
 
   std::cout << "Parquet Stream writing started." << std::endl;
   std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
-  auto res = WriteParquetFile(f_name, comp,compression_level);
+//  auto res = WriteParquetFile(f_name, comp,compression_level);
   std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
   auto t_p_w = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
 
@@ -991,7 +991,7 @@ int main(int argc, char** argv) {
 
   std::cout << "====Filtering arrow" << std::endl;
   begin = std::chrono::steady_clock::now();
-  read_feather2table(Get_Arrow_File(f_name,comp));
+//  read_feather2table(Get_Arrow_File(f_name,comp));
   end = std::chrono::steady_clock::now();
   auto t_a_r = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
 

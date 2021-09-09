@@ -72,16 +72,16 @@ int main(){
   sprojs.push_back(0);
   sprojs.push_back(8);
   std::vector<int> sfilters;
-  sfilters.push_back(1);
-  sfilters.push_back(3);
+//  sfilters.push_back(1);
+//  sfilters.push_back(3);
   std::cout << "start arrow scan-fitler: " << sprojs.size() << std::endl;
   std::vector<std::string> sops;
-  sops.push_back("EQUAL");
-  sops.push_back("EQUAL");
+//  sops.push_back("EQUAL");
+//  sops.push_back("EQUAL");
 
   std::vector<std::string> sopands;
-  sopands.push_back("F");
-  sopands.push_back("Secondary");
+//  sopands.push_back("F");
+//  sopands.push_back("Secondary");
 
   std::cout << "start arrow scan-fitler: " << sopands.size() << std::endl;
   begin = std::chrono::steady_clock::now();

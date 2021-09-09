@@ -574,8 +574,6 @@ IntermediateResult ScanParquetFile(std::string filename,  std::vector<int>* proj
     auto col_idx = filters->at(findex);
     bool is_proj = IsProj(col_idx, projs);
 
-//    std::cout << "is projected: " << is_proj << std::endl;
-
     std::string predicate;
     auto attr = schema->Column(col_idx)->physical_type();
     switch (attr) {
@@ -637,7 +635,7 @@ IntermediateResult ScanParquetFile(std::string filename,  std::vector<int>* proj
     std::cout << "finished filtering on "<<col_idx<< " with atrr "<<TypeToString(attr) <<": " << pre->length() << std::endl;
   }
 
-  std::cout << "finished filtering: " << pre->length() << std::endl;
+  std::cout << "finished filtering: " << std::endl;
 
   // then handle projection col
   for (auto pindex = 0; pindex < (int)projs->size();pindex++){
@@ -645,7 +643,7 @@ IntermediateResult ScanParquetFile(std::string filename,  std::vector<int>* proj
     auto col_idx = projs->at(pindex);
     auto attr = schema->Column(col_idx)->physical_type();
     IntermediateResult cur_proj;
-    std::cout << "pre length: " << pre->length() << std::endl;
+
     switch (attr) {
       case parquet::Type::type::DOUBLE:
         cur_proj = ScanParquetDouble(parquet_reader, col_idx,pre);

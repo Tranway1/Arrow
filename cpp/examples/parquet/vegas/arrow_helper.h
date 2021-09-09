@@ -932,15 +932,11 @@ IntermediateResult ScanArrowTable(std::string filename,  std::vector<int>* projs
   // track qualified entries for filters and projections
   std::shared_ptr<arrow::Array> pre = nullptr;
 
-
-
   // start filtering first
   for (auto findex = 0; findex < (int)filters->size();findex++){
     IntermediateResult cur_im;
     auto col_idx = filters->at(findex);
     bool is_proj = IsProj(col_idx, projs);
-
-//    std::cout << "is projected: " << is_proj << std::endl;
 
     std::string predicate;
     auto attr = schema->field(col_map[col_idx])->type();
@@ -1013,14 +1009,11 @@ IntermediateResult ScanArrowTable(std::string filename,  std::vector<int>* projs
      std::cout << "finished filtering on "<<col_idx<< " with attr "<<attr->name()<<": " << pre->length() << std::endl;
   }
 
-  std::cout << "finished filtering: " << pre->length() << std::endl;
-
   // then handle projection col
   for (auto pindex = 0; pindex < (int)projs->size();pindex++){
     IntermediateResult cur_im;
     auto col_idx = projs->at(pindex);
     auto attr = schema->field(col_map[col_idx])->type();
-    std::cout << "pre length: " << pre->length() << std::endl;
     std::cout << "index of map: " << col_map[col_idx] << std::endl;
     switch (attr->id()) {
       case arrow::Type::DOUBLE:
@@ -1112,7 +1105,6 @@ IntermediateResult ScanParquetTable(std::string filename,  std::vector<int>* pro
   auto status = parquet::arrow::OpenFile(input, pool, &arrow_reader);
   status = arrow_reader->ReadTable(cols, &table);
 
-//  read_feather_column_to_table(filename, &table, cols);
   auto end = std::chrono::steady_clock::now();
   auto t_load = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
   auto schema = table->schema();
@@ -1129,15 +1121,11 @@ IntermediateResult ScanParquetTable(std::string filename,  std::vector<int>* pro
   // track qualified entries for filters and projections
   std::shared_ptr<arrow::Array> pre = nullptr;
 
-
-
   // start filtering first
   for (auto findex = 0; findex < (int)filters->size();findex++){
     IntermediateResult cur_im;
     auto col_idx = filters->at(findex);
     bool is_proj = IsProj(col_idx, projs);
-
-//    std::cout << "is projected: " << is_proj << std::endl;
 
     std::string predicate;
     auto attr = schema->field(col_map[col_idx])->type();
@@ -1210,14 +1198,11 @@ IntermediateResult ScanParquetTable(std::string filename,  std::vector<int>* pro
     std::cout << "finished filtering on "<<col_idx<< " with attr "<<attr->name()<<": " << pre->length() << std::endl;
   }
 
-  std::cout << "finished filtering: " << pre->length() << std::endl;
-
   // then handle projection col
   for (auto pindex = 0; pindex < (int)projs->size();pindex++){
     IntermediateResult cur_im;
     auto col_idx = projs->at(pindex);
     auto attr = schema->field(col_map[col_idx])->type();
-    std::cout << "pre length: " << pre->length() << std::endl;
     std::cout << "index of map: " << col_map[col_idx] << std::endl;
     switch (attr->id()) {
       case arrow::Type::DOUBLE:
