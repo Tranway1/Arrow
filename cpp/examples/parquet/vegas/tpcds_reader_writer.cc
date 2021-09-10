@@ -26,7 +26,6 @@
 #include <cstdlib>
 #include <iostream>
 #include <fstream>
-#include <filesystem>
 
 #include "arrow/io/file.h"
 #include "parquet/exception.h"

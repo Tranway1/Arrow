@@ -3,7 +3,7 @@
 This custom arrow/parquet API supports efficient loading, including target column only extraction and conversion (Parquet to Arrows), target column chunk loading, data skipping, and direct query on dictionary encoded data.
 Please build the project with
     
-    _/usr/bin/cmake -DCMAKE_BUILD_TYPE=Release DARROW_BUILD_EXAMPLES=ON -DPARQUET_BUILD_EXAMPLES=ON -DARROW_PARQUET=ON -DARROW_DATASET=ON -DARROW_ORC=ON -DCMAKE_DEPENDS_USE_COMPILER=FALSE -G "CodeBlocks - Unix Makefiles" /home/chunweiliu/arrow/cpp_
+    /usr/bin/cmake -DCMAKE_BUILD_TYPE=Release DARROW_BUILD_EXAMPLES=ON -DPARQUET_BUILD_EXAMPLES=ON -DARROW_PARQUET=ON -DARROW_DATASET=ON -DARROW_ORC=ON -DCMAKE_DEPENDS_USE_COMPILER=FALSE -G "CodeBlocks - Unix Makefiles" /home/chunweiliu/Vegas%20vNext/cpp
 to include axamples and enable compressions for Arrow.
 
 
@@ -16,15 +16,13 @@ It also includes query micro-benchmarking, including filtering, projection with/
 * _parquet_arrow_tpsds_example_ (vegas/tpcds_reader_writer.cc) includes code blocks that encode the text tpc-ds file into parquet,
 transcode parquet into arrow with given compression and compression level (compression level is now only working for zstd), some filtering, projection and aggregation queries. 
 Since the Parquet encoding and Parquet->Arrow transcoding usually takes long time, you can manually disable those code blocks to save time if you have encoded file in your local folder.
-Run example with given [file], [compression] and [compression_level]: _/release/parquet_arrow_tpsds_example /mnt/dataset/catalog_sales lz4_
+Run example with given [file], [compression] and [compression_level]: _./build/release/parquet_arrow_tpsds_example /mnt/dataset/catalog_sales lz4_
 
 * _parquet_arrow_projection_example_ (vegas/projection_example.cc) inlcudes micro-benchmarking on Parquet and Arrow with varying selectivity.
-Run example with given [file], [compression] and [selectivity]: _/release/parquet_arrow_projection_example /mnt/dataset/catalog_sales lz4 0.1_
-
-* _parquet_arrow_vegas_ (vegas/gandiva_example.cpp) includes a simple example showing how gandiva expression work on Parquet and Arrow files
+Run example with given [file], [compression] and [selectivity]: _./build/release/parquet_arrow_projection_example /mnt/dataset/catalog_sales lz4 0.1_
 
 * _parquet_arrow_dictionary_example_ (vegas/dictionary_filtering_example.cc) run arrow direct query on the encoded domain.
-  Run example with given [file], [compression]: _/release/parquet_arrow_dictionary_example /mnt/dataset/catalog_sales lz4 0.1_
+  Run example with given [file], [compression]: _./build/release/parquet_arrow_dictionary_example /mnt/dataset/catalog_sales lz4 0.1_
 
 * _scan_example_ (vegas/scan_operator.cpp) includes filtering-projection query evaluations with 5 query stems from tpd-ds workload.
 
