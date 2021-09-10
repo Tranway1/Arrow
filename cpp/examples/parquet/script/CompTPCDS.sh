@@ -9,10 +9,10 @@ do
 #		    for level in 1 5 9;
 		    for level in 9;
 		    do
-		       /home/chunweiliu/arrow/cpp/cmake-build-release-azurevm/release/parquet_stream_tpsds_example "${dir}${table}" ${comp} ${level}
+		       /home/chunweiliu/arrow/cpp/cmake-build-release-azurevm/release/parquet_arrow_tpsds_example "${dir}${table}" ${comp} ${level}
 		    done
 		  else
-		    /home/chunweiliu/arrow/cpp/cmake-build-release-azurevm/release/parquet_stream_tpsds_example "${dir}${table}" ${comp}
+		    /home/chunweiliu/arrow/cpp/cmake-build-release-azurevm/release/parquet_arrow_tpsds_example "${dir}${table}" ${comp}
       fi
 		done
 done

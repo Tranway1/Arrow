@@ -959,6 +959,8 @@ int main(int argc, char** argv) {
   std::cout << "Writing Parquet to Arrow feather and save to disk." << std::endl;
   begin = std::chrono::steady_clock::now();
   read_Parquet2ArrowDisk(f_name,comp,compression_level);
+//  force dictionary encoding for a string column
+//  Parquet2ArrowDict(f_name,comp,compression_level);
   end = std::chrono::steady_clock::now();
   auto t_p2a_d = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
 
@@ -973,8 +975,6 @@ int main(int argc, char** argv) {
   std::ofstream ofs("/proc/sys/vm/drop_caches");
   ofs << "3" << std::endl;
 
-//  SumParquetFile(Get_Parquet_File(f_name,comp));
-//  read_feather2table(Get_Arrow_File(f_name,comp));
 
 
 //  sync();

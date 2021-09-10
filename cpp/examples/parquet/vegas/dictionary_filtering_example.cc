@@ -668,7 +668,6 @@ int main(int argc, char** argv) {
 
   std::string f_name = argv[1];
   std::string comp = argv[2];
-  int num=14401261;
 //  int num=1441548;
   std::cout << "filtering on "<<f_name<<" with " <<comp << "\n";
 
