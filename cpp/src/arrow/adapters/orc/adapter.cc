@@ -535,8 +535,15 @@ class ORCFileWriter::Impl {
   }
 
   Status Write(const Table& table) {
+    /*
+     * added by Chunwei,
+     * disable default compression for orc
+     */
+    auto orcopt = new liborc::WriterOptions();
+    orcopt->setCompression( ::orc::CompressionKind_ZSTD);
+
     std::unique_ptr<liborc::WriterOptions> orc_options =
-        std::unique_ptr<liborc::WriterOptions>(new liborc::WriterOptions());
+        std::unique_ptr<liborc::WriterOptions>(orcopt);
     ARROW_ASSIGN_OR_RAISE(auto orc_schema, GetOrcType(*(table.schema())));
     ORC_CATCH_NOT_OK(
         writer_ = liborc::createWriter(*orc_schema, out_stream_.get(), *orc_options))

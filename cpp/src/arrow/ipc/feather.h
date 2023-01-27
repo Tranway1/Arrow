@@ -98,7 +98,7 @@ class ARROW_EXPORT Reader {
 
   /// \brief Read only the specified columns and data chunks from the file as an arrow::Table.
   /// \author Chunwei Liu
-  /// \param[in] names the column names to read
+  /// \param[in] indices the column indices to read
   /// \param[out] out the returned table
   /// \return Status
   ///

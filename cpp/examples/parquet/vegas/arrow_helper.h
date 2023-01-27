@@ -56,7 +56,7 @@ inline bool doubleLess(double a, double b){
 }
 
 inline bool doubleLE(double a, double b){
-  return a<+b;
+  return a<=b;
 }
 
 inline bool doubleEqual(double a, double b){
@@ -77,7 +77,7 @@ inline bool intLess(int a, int b){
 }
 
 inline bool intLE(int a, int b){
-  return a<+b;
+  return a<=b;
 }
 
 inline bool intEqual(int a, int b){
@@ -94,6 +94,10 @@ inline bool intGE(int a, int b){
 
 inline bool strEqual(std::string a, std::string b){
   return a==b;
+}
+
+inline bool strViewEqual(nonstd::sv_lite::string_view a, nonstd::sv_lite::string_view b){
+  return false;
 }
 
 int64_t DictTranslate(std::shared_ptr<arrow::StringArray> dictionary, std::string opand){
@@ -167,9 +171,12 @@ template<class T>
   }
   else if (pre == nullptr){
     for (int64_t idx = 0; idx < chunk->length(); idx++){
-      val = doublechunk->Value(idx);
-      if (func(val,pred)){
-        idx_builder.Append(idx+base);
+//      if (!doublechunk->IsNull(idx)){
+      if (true){
+        val = doublechunk->Value(idx);
+        if (func(val,pred)){
+          idx_builder.Append(idx+base);
+        }
       }
     }
   }
@@ -178,9 +185,12 @@ template<class T>
     int64_t loc = 0;
     for (int64_t idx = 0; idx < len; idx++){
       loc =pre->at(idx);
-      val = doublechunk->Value(loc-base);
-      if (func(val,pred)){
-        idx_builder.Append(loc);
+//      if (!doublechunk->IsNull(loc-base)){
+      if (true){
+        val = doublechunk->Value(loc-base);
+        if (func(val,pred)){
+          idx_builder.Append(loc);
+        }
       }
     }
   }
@@ -206,11 +216,15 @@ template<class T>
   }
   else if (pre == nullptr){
     for (int64_t idx = 0; idx < chunk->length(); idx++){
-      val = intchunk->Value(idx);
-      if (func(val,pred)){
-        idx_builder.Append(idx+base);
+//      if (!intchunk->IsNull(idx)){
+        if (true){
+        val = intchunk->Value(idx);
+        if (func(val,pred)){
+          idx_builder.Append(idx+base);
 
+        }
       }
+
     }
   }
   else{
@@ -218,9 +232,12 @@ template<class T>
     int64_t loc = 0;
     for (int64_t idx = 0; idx < len; idx++){
       loc =pre->at(idx);
-      val =intchunk->Value(loc-base);
-      if (func(val,pred)){
-        idx_builder.Append(loc);
+//      if (!intchunk->IsNull(loc-base)){
+      if (true){
+        val =intchunk->Value(loc-base);
+        if (func(val,pred)){
+          idx_builder.Append(loc);
+        }
       }
     }
   }
@@ -236,8 +253,8 @@ template<class T>
 /// \param pre
 /// \param base
 template<class T>
-        void FilterStringChunk(std::shared_ptr<arrow::Array>  chunk, arrow::Int64Builder& idx_builder, std::string pred,
-                              T func, bool projected = false, std::vector<int64_t>* pre = nullptr, int64_t base = 0){
+void FilterStringChunk(std::shared_ptr<arrow::Array>  chunk, arrow::Int64Builder& idx_builder, std::string pred,
+                       T func, bool projected = false, std::vector<int64_t>* pre = nullptr, int64_t base = 0){
 
   auto intchunk=std::static_pointer_cast<arrow::StringArray>(chunk);
   std::string val = "";
@@ -246,11 +263,14 @@ template<class T>
   }
   else if (pre == nullptr){
     for (int64_t idx = 0; idx < chunk->length(); idx++){
-      val = intchunk->GetString(idx);
-      if (func(val,pred)){
-        idx_builder.Append(idx+base);
-
+      //      if (!intchunk->IsNull(idx)){
+      if (true){
+        val = intchunk->GetString(idx);
+        if (func(val,pred)){
+          idx_builder.Append(idx+base);
+        }
       }
+
     }
   }
   else{
@@ -258,10 +278,64 @@ template<class T>
     int64_t loc = 0;
     for (int64_t idx = 0; idx < len; idx++){
       loc =pre->at(idx);
-      val =intchunk->GetString(loc-base);
-      if (func(val,pred)){
-        idx_builder.Append(loc);
+//      if (!intchunk->IsNull(loc-base)){
+      if (true){
+        val =intchunk->GetString(loc-base);
+        if (func(val,pred)){
+          idx_builder.Append(loc);
+        }
       }
+
+    }
+  }
+}
+
+
+
+/// filter a string data chunk with given condition, output is list of qualified row number
+/// \tparam T
+/// \param chunk
+/// \param idx_builder
+/// \param spred
+/// \param func
+/// \param projected
+/// \param pre
+/// \param base
+template<class T>
+        void FilterStringViewChunk(std::shared_ptr<arrow::Array>  chunk, arrow::Int64Builder& idx_builder, std::string spred,
+                              T func, bool projected = false, std::vector<int64_t>* pre = nullptr, int64_t base = 0){
+
+  auto intchunk=std::static_pointer_cast<arrow::StringArray>(chunk);
+  arrow::util::string_view  pred = arrow::util::string_view(spred);
+  arrow::util::string_view  val = arrow::util::string_view("");
+  if (pre != nullptr && pre->size()==0){
+    return ;
+  }
+  else if (pre == nullptr){
+    for (int64_t idx = 0; idx < chunk->length(); idx++){
+      //      if (!intchunk->IsNull(idx)){
+      if (true){
+        val = intchunk->GetView(idx);
+        if (val==pred){
+          idx_builder.Append(idx+base);
+        }
+      }
+
+    }
+  }
+  else{
+    int len = pre->size();
+    int64_t loc = 0;
+    for (int64_t idx = 0; idx < len; idx++){
+      loc =pre->at(idx);
+//      if (!intchunk->IsNull(loc-base)){
+      if (true){
+        val =intchunk->GetView(loc-base);
+        if (val==pred){
+          idx_builder.Append(loc);
+        }
+      }
+
     }
   }
 }
@@ -327,8 +401,11 @@ void ScanDataChunk(std::shared_ptr<arrow::Array> chunk, arrow::DoubleBuilder& va
   }
   else if (pre == nullptr){
     for (int64_t idx = 0; idx < chunk->length(); idx++){
-      val = doublechunk->Value(idx);
-      val_builder.Append(val);
+//      if (!doublechunk->IsNull(idx)){
+      if (true){
+        val = doublechunk->Value(idx);
+        val_builder.Append(val);
+      }
     }
   }
   else{
@@ -336,8 +413,12 @@ void ScanDataChunk(std::shared_ptr<arrow::Array> chunk, arrow::DoubleBuilder& va
     int64_t loc = 0;
     for (int64_t idx = 0; idx < len; idx++){
       loc =pre->at(idx);
-      val = doublechunk->Value(loc-base);
-      val_builder.Append(val);
+//      if (!doublechunk->IsNull(loc-base)){
+      if (true){
+        val = doublechunk->Value(loc-base);
+        val_builder.Append(val);
+      }
+
     }
   }
 }
@@ -357,8 +438,12 @@ void ScanDataChunk(std::shared_ptr<arrow::Array> chunk, arrow::Int32Builder& val
   }
   else if (pre == nullptr){
     for (int64_t idx = 0; idx < chunk->length(); idx++){
-      val = intchunk->Value(idx);
-      val_builder.Append(val);
+      //      if (!intchunk->IsNull(idx)){
+      if (true){
+        val = intchunk->Value(idx);
+        val_builder.Append(val);
+      }
+
     }
   }
   else{
@@ -366,8 +451,11 @@ void ScanDataChunk(std::shared_ptr<arrow::Array> chunk, arrow::Int32Builder& val
     int64_t loc = 0;
     for (int64_t idx = 0; idx < len; idx++){
       loc = pre->at(idx);
-      val = intchunk->Value(loc-base);
-      val_builder.Append(val);
+//      if (!intchunk->IsNull(loc-base)){
+      if (true){
+        val = intchunk->Value(loc-base);
+        val_builder.Append(val);
+      }
     }
   }
 }
@@ -388,8 +476,12 @@ void ScanDataChunk(std::shared_ptr<arrow::Array> chunk, arrow::StringBuilder& va
   }
   else if (pre == nullptr){
     for (int64_t idx = 0; idx < chunk->length(); idx++){
-      val = stringchunk->GetString(idx);
-      val_builder.Append(val);
+//      if (!stringchunk->IsNull(idx)){
+      if (true){
+        val = stringchunk->GetString(idx);
+        val_builder.Append(val);
+      }
+
     }
   }
   else{
@@ -397,8 +489,11 @@ void ScanDataChunk(std::shared_ptr<arrow::Array> chunk, arrow::StringBuilder& va
     int64_t loc = 0;
     for (int64_t idx = 0; idx < len; idx++){
       loc = pre->at(idx);
-      val = stringchunk->GetString(loc-base);
-      val_builder.Append(val);
+//      if (!stringchunk->IsNull(loc-base)){
+      if (true){
+        val = stringchunk->GetString(loc-base);
+        val_builder.Append(val);
+      }
     }
   }
 }
@@ -518,6 +613,7 @@ template<class T>
   auto n_chunks = c_array->num_chunks();
   auto base = 0;
   auto cur_num = 0;
+  std::cout<<"nbatches: "<<n_chunks<<std::endl;
 
   if (pre == nullptr){
     for (auto i=0;i<n_chunks;i++){
@@ -577,12 +673,13 @@ template<class T>
   auto n_chunks = c_array->num_chunks();
   auto base = 0;
   auto cur_num = 0;
+  std::cout<<"nbatches: "<<n_chunks<<std::endl;
 
   if (pre == nullptr){
     for (auto i=0;i<n_chunks;i++){
       auto cur_array = c_array->chunk(i);
       cur_num = cur_array->length();
-      FilterStringChunk(cur_array,idx_builder, pred, func, projected, nullptr, base);
+      FilterStringViewChunk(cur_array,idx_builder, pred, func, projected, nullptr, base);
       base+=cur_num;
     }
     if(!idx_builder.Finish(&idx_array).ok())
@@ -607,7 +704,7 @@ template<class T>
       mark++;
     }
 
-    FilterStringChunk(cur_array,idx_builder, pred, func, projected, &local_bv, base);
+    FilterStringViewChunk(cur_array,idx_builder, pred, func, projected, &local_bv, base);
     base+=cur_num;
   }
   if(!idx_builder.Finish(&idx_array).ok())
@@ -920,6 +1017,11 @@ IntermediateResult ScanArrowTable(std::string filename,  std::vector<int>* projs
   auto t_load = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
   auto schema = table->schema();
 
+  for (int col: cols){
+    std::cout <<col<< "---" << col_map[col]<< ", type: " << table->schema()->field(col_map[col])->type()->name() <<std::endl;
+  }
+
+
   std::cout << "==Num of col: " << schema->num_fields() <<" and arrow loading time: "<< t_load<< std::endl;
   std::vector<std::shared_ptr<arrow::Array>> res;
   std::unordered_map<int, int> proj_map;
@@ -940,7 +1042,9 @@ IntermediateResult ScanArrowTable(std::string filename,  std::vector<int>* projs
 
     std::string predicate;
     auto attr = schema->field(col_map[col_idx])->type();
-     switch (attr->id()) {
+
+
+    switch (attr->id()) {
 
        case arrow::Type::DOUBLE:
          predicate = opands->at(findex);
@@ -988,7 +1092,7 @@ IntermediateResult ScanArrowTable(std::string filename,  std::vector<int>* projs
          std::cout<< "string oprand: "<< predicate<<std::endl;
          if (ops->at(findex) == "EQUAL")
            cur_im = FilterChunkedArray(table->column(col_map[col_idx]),  predicate,
-                                       strEqual, is_proj,  pre);
+                                       strViewEqual, is_proj,  pre);
          else
            throw std::runtime_error(ops->at(findex) + " operator is not supported for string yet.");
          break;
@@ -1014,7 +1118,7 @@ IntermediateResult ScanArrowTable(std::string filename,  std::vector<int>* projs
     IntermediateResult cur_im;
     auto col_idx = projs->at(pindex);
     auto attr = schema->field(col_map[col_idx])->type();
-    std::cout << "index of map: " << col_map[col_idx] << std::endl;
+    std::cout << "index of map for projection: " << col_map[col_idx] << std::endl;
     switch (attr->id()) {
       case arrow::Type::DOUBLE:
         if (pre==nullptr){

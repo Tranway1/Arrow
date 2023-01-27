@@ -5,17 +5,16 @@
 #include <cstdint>
 #include <cassert>
 #include <algorithm>
-#include <iostream>
 #include <memory>
 #include <chrono>
 #include <parquet/file_reader.h>
 #include <parquet/column_reader.h>
 #include "arrow/table.h"
-#include "v_util.h"
 #include <fstream>
 #include "arrow/type_fwd.h"
+#include "v_util.h"
 #include <arrow/api.h>
-
+#include <iostream>
 
 
 void ScanParquetFileWithIndices(std::string filename, int* array, int size) {
@@ -225,17 +224,26 @@ int main(int argc, char** argv) {
   std::cout << "You have entered " << argc
             << " arguments:" << "\n";
 
+  bool clearcache = false;
   for (int i = 0; i < argc; ++i)
     std::cout << argv[i] << "\n";
 
   std::string f_name = argv[1];
   std::string comp = argv[2];
   float ratio = std::stof(argv[3]);
+  int comp_level = argc>4? std::stoi(argv[4]) : 1;
   int num=14401261;
 //  int num=1441548;
   std::cout << "lookup with ratio "<<ratio<<" on "<<f_name<<" with " <<comp << "\n";
 
   int *indices = getRandomIdx(num,ratio);
+
+  std::ofstream ofs("/proc/sys/vm/drop_caches");
+  if (clearcache){
+    sync();
+    std::cout << "Clear cache ... "<<std::endl;
+    ofs << "3" << std::endl;
+  }
 
   std::cout << "----Lookup parquet" << std::endl;
   auto begin = std::chrono::steady_clock::now();
@@ -243,7 +251,11 @@ int main(int argc, char** argv) {
   auto end = std::chrono::steady_clock::now();
   auto t_p_l = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
 
-  ScanArrowFeatherWithIndices(Get_Arrow_File(f_name,comp),indices, num*ratio);
+  if (clearcache){
+    std::cout << "Clear cache ... "<<std::endl;
+    sync();
+    ofs << "3" << std::endl;
+  }
 
   std::cout << "----Lookup arrow" << std::endl;
   auto a_begin = std::chrono::steady_clock::now();
@@ -251,6 +263,11 @@ int main(int argc, char** argv) {
   auto a_end = std::chrono::steady_clock::now();
   auto t_a_l = std::chrono::duration_cast<std::chrono::milliseconds>(a_end - a_begin).count();
 
+  if (clearcache){
+    std::cout << "Clear cache ... "<<std::endl;
+    sync();
+    ofs << "3" << std::endl;
+  }
 
   std::cout << "----Lookup arrow with skip" << std::endl;
   auto as_begin = std::chrono::steady_clock::now();

@@ -15,6 +15,8 @@
 # specific language governing permissions and limitations
 # under the License.
 
+add_executable(col_recode vegas/col_recode.cc)
+add_executable(transcoder vegas/transcoding.cc)
 add_executable(parquet_low_level_example low_level_api/reader_writer.cc)
 add_executable(parquet_low_level_example2 low_level_api/reader_writer2.cc)
 add_executable(parquet_arrow_example parquet_arrow/reader_writer.cc)
@@ -65,6 +67,8 @@ target_link_libraries(parquet_low_level_example ${PARQUET_EXAMPLE_LINK_LIBS})
 target_link_libraries(parquet_low_level_example2 ${PARQUET_EXAMPLE_LINK_LIBS})
 target_link_libraries(parquet_stream_api_example ${PARQUET_EXAMPLE_LINK_LIBS})
 target_link_libraries(parquet_arrow_tpsds_example ${PARQUET_EXAMPLE_LINK_LIBS})
+target_link_libraries(col_recode ${PARQUET_EXAMPLE_LINK_LIBS})
+target_link_libraries(transcoder ${PARQUET_EXAMPLE_LINK_LIBS})
 target_link_libraries(parquet_arrow_projection_example ${PARQUET_EXAMPLE_LINK_LIBS})
 target_link_libraries(parquet_arrow_dictionary_example ${PARQUET_EXAMPLE_LINK_LIBS})
 target_link_libraries(scan_example ${PARQUET_EXAMPLE_LINK_LIBS})
@@ -81,6 +85,8 @@ add_dependencies(parquet
         parquet_arrow_example
         parquet_stream_api_example
         parquet_arrow_tpsds_example
+        col_recode
+        transcoder
         parquet_arrow_projection_example
         parquet_arrow_dictionary_example
         scan_example)

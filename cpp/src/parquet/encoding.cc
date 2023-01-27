@@ -2408,6 +2408,7 @@ std::unique_ptr<Encoder> MakeEncoder(Type::type type_num, Encoding::type encodin
                                      bool use_dictionary, const ColumnDescriptor* descr,
                                      MemoryPool* pool) {
   if (use_dictionary) {
+    //todo: use dictionary encoding by default, should enable RLE_DICTIONARY chunwei.
     switch (type_num) {
       case Type::INT32:
         return std::unique_ptr<Encoder>(new DictEncoderImpl<Int32Type>(descr, pool));

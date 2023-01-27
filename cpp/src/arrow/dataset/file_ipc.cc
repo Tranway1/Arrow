@@ -39,7 +39,7 @@ namespace dataset {
 
 static inline ipc::IpcReadOptions default_read_options() {
   auto options = ipc::IpcReadOptions::Defaults();
-  options.use_threads = false;
+  options.use_threads = true;
   return options;
 }
 

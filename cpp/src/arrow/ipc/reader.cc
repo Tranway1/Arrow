@@ -429,6 +429,10 @@ Result<std::shared_ptr<Buffer>> DecompressBuffer(const std::shared_ptr<Buffer>& 
   return std::move(uncompressed);
 }
 
+        static long i_size = 0;
+        static long d_size = 0;
+        static long s_size = 0;
+
 Status DecompressBuffers(Compression::type compression, const IpcReadOptions& options,
                          ArrayDataVector* fields) {
   struct BufferAccumulator {
@@ -437,6 +441,41 @@ Status DecompressBuffers(Compression::type compression, const IpcReadOptions& op
     void AppendFrom(const ArrayDataVector& fields) {
       for (const auto& field : fields) {
         for (auto& buffer : field->buffers) {
+            if (buffer != nullptr) {
+//                std::cout<<field->type->ToString()<<" "<< buffer->size() << std::endl;
+                switch (field->type->id() ) {
+                    case Type::INT8:
+                    case Type::INT16:
+                    case Type::INT32:
+                    case Type::DATE32:
+                    case Type::TIME32:
+                    case Type::INT64:
+                    case Type::DATE64:
+                    case Type::TIMESTAMP:
+                    case Type::TIME64:
+                    case Type::DURATION:
+                    case Type::UINT8:
+                    case Type::UINT16:
+                    case Type::UINT32:
+                    case Type::UINT64:
+                        i_size += buffer->size();
+                        break;
+                    case Type::FLOAT:
+                    case Type::DOUBLE:
+                        d_size+= buffer->size();
+                        break;
+                    case Type::BINARY:
+                    case Type::STRING:
+                    case Type::FIXED_SIZE_BINARY:
+                    case Type::LARGE_BINARY:
+                    case Type::LARGE_STRING:
+                        s_size+= buffer->size();
+                        break;
+                    default:
+                    DCHECK(false);
+                }
+            }
+
           buffers_.push_back(&buffer);
         }
         AppendFrom(field->child_data);
@@ -445,7 +484,9 @@ Status DecompressBuffers(Compression::type compression, const IpcReadOptions& op
 
     BufferPtrVector Get(const ArrayDataVector& fields) && {
       AppendFrom(fields);
+//        std::cout<< "buffer size :"<< buffers_.size()<<std::endl;
       return std::move(buffers_);
+
     }
 
     BufferPtrVector buffers_;
@@ -453,9 +494,16 @@ Status DecompressBuffers(Compression::type compression, const IpcReadOptions& op
 
   // Flatten all buffers
   auto buffers = BufferAccumulator{}.Get(*fields);
+//    std::cout << options.use_threads << " batch," << compression << "," << i_size << "," << d_size << "," << s_size << ","
+//              << i_size + d_size + s_size << "," << "\n";
+    if (compression== Compression::UNCOMPRESSED){
+        return Status::OK();
+    }
+    // chunwei code hacking for column size counting
 
   std::unique_ptr<util::Codec> codec;
   ARROW_ASSIGN_OR_RAISE(codec, util::Codec::Create(compression));
+
 
   return ::arrow::internal::OptionalParallelFor(
       options.use_threads, static_cast<int>(buffers.size()), [&](int i) {
@@ -475,6 +523,10 @@ Result<std::shared_ptr<RecordBatch>> LoadRecordBatchSubset(
   ArrayDataVector filtered_columns;
   FieldVector filtered_fields;
   std::shared_ptr<Schema> filtered_schema;
+
+
+  std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+
 
   for (int i = 0; i < schema->num_fields(); ++i) {
     const Field& field = *schema->field(i);
@@ -497,6 +549,8 @@ Result<std::shared_ptr<RecordBatch>> LoadRecordBatchSubset(
     }
   }
 
+
+
   // Dictionary resolution needs to happen on the unfiltered columns,
   // because fields are mapped structurally (by path in the original schema).
   RETURN_NOT_OK(ResolveDictionaries(columns, *context.dictionary_memo,
@@ -514,6 +568,10 @@ Result<std::shared_ptr<RecordBatch>> LoadRecordBatchSubset(
     RETURN_NOT_OK(
         DecompressBuffers(context.compression, context.options, &filtered_columns));
   }
+  else
+      DecompressBuffers(context.compression, context.options, &filtered_columns);
+  //chunwei added for count uncompressed size
+
 
   // swap endian in a set of ArrayData if necessary (swap_endian == true)
   if (context.swap_endian) {
@@ -522,6 +580,9 @@ Result<std::shared_ptr<RecordBatch>> LoadRecordBatchSubset(
                             arrow::internal::SwapEndianArrayData(filtered_columns[i]));
     }
   }
+  std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+  auto t_p_w = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
+//  std::cout << "loading and decompression swap time:" << t_p_w<< std::endl;
   return RecordBatch::Make(std::move(filtered_schema), metadata->length(),
                            std::move(filtered_columns));
 }
@@ -978,9 +1039,12 @@ static Result<std::unique_ptr<Message>> ReadMessageFromBlock(const FileBlock& bl
 
   // TODO(wesm): this breaks integration tests, see ARROW-3256
   // DCHECK_EQ((*out)->body_length(), block.body_length);
-
+  std::chrono::steady_clock::time_point st = std::chrono::steady_clock::now();
   ARROW_ASSIGN_OR_RAISE(auto message,
                         ReadMessage(block.offset, block.metadata_length, file));
+  std::chrono::steady_clock::time_point ed = std::chrono::steady_clock::now();
+  auto bt = std::chrono::duration_cast<std::chrono::milliseconds>(ed - st).count();
+//  std::cout << "time elapsed in readmessage "<<": " << bt << std::endl;
   return std::move(message);
 }
 
@@ -1065,21 +1129,24 @@ class RecordBatchFileReaderImpl : public RecordBatchFileReader {
   Result<std::shared_ptr<RecordBatch>> ReadRecordBatch(int i) override {
     DCHECK_GE(i, 0);
     DCHECK_LT(i, num_record_batches());
-
     if (!read_dictionaries_) {
 
       RETURN_NOT_OK(ReadDictionaries());
       read_dictionaries_ = true;
     }
 
+    std::chrono::steady_clock::time_point st = std::chrono::steady_clock::now();
     ARROW_ASSIGN_OR_RAISE(auto message, ReadMessageFromBlock(GetRecordBatchBlock(i)));
-
+    std::chrono::steady_clock::time_point ed = std::chrono::steady_clock::now();
+    auto bt = std::chrono::duration_cast<std::chrono::milliseconds>(ed - st).count();
+//    std::cout << "time elapsed in message batch"<<i<<": " << bt << std::endl;
     CHECK_HAS_BODY(*message);
     ARROW_ASSIGN_OR_RAISE(auto reader, Buffer::GetReader(message->body()));
     IpcReadContext context(&dictionary_memo_, options_, swap_endian_);
     ARROW_ASSIGN_OR_RAISE(auto batch, ReadRecordBatchInternal(
                                           *message->metadata(), schema_,
                                           field_inclusion_mask_, context, reader.get()));
+
     ++stats_.num_record_batches;
 
 

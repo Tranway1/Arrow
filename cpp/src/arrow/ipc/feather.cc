@@ -727,11 +727,19 @@ class ReaderV2 : public Reader {
 
   Status Read(const IpcReadOptions& options, std::shared_ptr<Table>* out) {
     ARROW_ASSIGN_OR_RAISE(auto reader, RecordBatchFileReader::Open(source_, options));
+    std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
     RecordBatchVector batches(reader->num_record_batches());
     for (int i = 0; i < reader->num_record_batches(); ++i) {
+        std::chrono::steady_clock::time_point st = std::chrono::steady_clock::now();
       ARROW_ASSIGN_OR_RAISE(batches[i], reader->ReadRecordBatch(i));
+        std::chrono::steady_clock::time_point ed = std::chrono::steady_clock::now();
+        auto bt = std::chrono::duration_cast<std::chrono::milliseconds>(ed - st).count();
+//        std::cout << "time elapsed in batch"<<i<<": " << bt << std::endl;
     }
 
+    std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+    auto iotime = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
+    std::cout << "time elapsed in make arrow table: " << iotime << std::endl;
     return Table::FromRecordBatches(reader->schema(), batches).Value(out);
   }
 

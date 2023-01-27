@@ -3,7 +3,7 @@
 This custom arrow/parquet API supports efficient loading, including target column only extraction and conversion (Parquet to Arrows), target column chunk loading, data skipping, and direct query on dictionary encoded data.
 Please build the project with
     
-    /usr/bin/cmake -DCMAKE_BUILD_TYPE=Release DARROW_BUILD_EXAMPLES=ON -DPARQUET_BUILD_EXAMPLES=ON -DARROW_PARQUET=ON -DARROW_DATASET=ON -DARROW_ORC=ON -DCMAKE_DEPENDS_USE_COMPILER=FALSE -G "CodeBlocks - Unix Makefiles" /home/chunweiliu/Vegas%20vNext/cpp
+    /usr/bin/cmake -DCMAKE_BUILD_TYPE=Release -DARROW_BUILD_EXAMPLES=ON -DPARQUET_BUILD_EXAMPLES=ON -DARROW_PARQUET=ON -DARROW_DATASET=ON -DARROW_ORC=ON -DCMAKE_DEPENDS_USE_COMPILER=FALSE -G "CodeBlocks - Unix Makefiles" /home/chunweiliu/Vegas%20vNext/cpp
 to include axamples and enable compressions for Arrow.
 
 

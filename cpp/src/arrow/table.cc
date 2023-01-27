@@ -278,7 +278,7 @@ Result<std::shared_ptr<Table>> Table::FromRecordBatches(
     const std::vector<std::shared_ptr<RecordBatch>>& batches) {
   const int nbatches = static_cast<int>(batches.size());
   const int ncolumns = static_cast<int>(schema->num_fields());
-  std::cout <<"FromRecordBatches in table.cc: nbatches: "<<nbatches<<" ncolumns: "<<ncolumns<<std::endl;
+//  std::cout <<"FromRecordBatches in table.cc: nbatches: "<<nbatches<<" ncolumns: "<<ncolumns<<std::endl;
   int64_t num_rows = 0;
   for (int i = 0; i < nbatches; ++i) {
     if (!batches[i]->schema()->Equals(*schema, false)) {

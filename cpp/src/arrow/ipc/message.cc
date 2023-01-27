@@ -24,6 +24,8 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <chrono>
+#include <iostream>
 
 #include "arrow/buffer.h"
 #include "arrow/device.h"
@@ -289,12 +291,13 @@ Result<std::unique_ptr<Message>> ReadMessage(int64_t offset, int32_t metadata_le
     return Status::Invalid("metadata_length should be at least ",
                            decoder.next_required_size());
   }
+  ARROW_ASSIGN_OR_RAISE(auto metadata, file->ReadAt(offset, metadata_length))
 
-  ARROW_ASSIGN_OR_RAISE(auto metadata, file->ReadAt(offset, metadata_length));
   if (metadata->size() < metadata_length) {
     return Status::Invalid("Expected to read ", metadata_length,
                            " metadata bytes but got ", metadata->size());
   }
+
   ARROW_RETURN_NOT_OK(decoder.Consume(metadata));
 
   switch (decoder.state()) {
@@ -308,14 +311,19 @@ Result<std::unique_ptr<Message>> ReadMessage(int64_t offset, int32_t metadata_le
                              " invalid. File offset: ", offset,
                              ", metadata length: ", metadata_length);
     case MessageDecoder::State::BODY: {
+      std::chrono::steady_clock::time_point st = std::chrono::steady_clock::now();
       ARROW_ASSIGN_OR_RAISE(auto body, file->ReadAt(offset + metadata_length,
                                                     decoder.next_required_size()));
+      std::chrono::steady_clock::time_point ed = std::chrono::steady_clock::now();
+      auto bt = std::chrono::duration_cast<std::chrono::milliseconds>(ed - st).count();
+//      std::cout << "time elapsed in readmessage switch get body"<<": " << bt << std::endl;
       if (body->size() < decoder.next_required_size()) {
         return Status::IOError("Expected to be able to read ",
                                decoder.next_required_size(),
                                " bytes for message body, got ", body->size());
       }
       RETURN_NOT_OK(decoder.Consume(body));
+
       return std::move(result);
     }
     case MessageDecoder::State::EOS:

@@ -25,6 +25,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <iostream>
 
 #include "arrow/array.h"
 #include "arrow/buffer_builder.h"
@@ -2032,6 +2033,7 @@ std::shared_ptr<ColumnWriter> ColumnWriter::Make(ColumnChunkMetaDataBuilder* met
   if (use_dictionary) {
     encoding = properties->dictionary_index_encoding();
   }
+//  std::cout<<"encoding from col writer: "<<EncodingToString(encoding)<<std::endl;
   switch (descr->physical_type()) {
     case Type::BOOLEAN:
       return std::make_shared<TypedColumnWriterImpl<BooleanType>>(
