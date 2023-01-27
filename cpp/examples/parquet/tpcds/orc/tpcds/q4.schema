@@ -1,0 +1,5 @@
+struct<
+cs_sold_date_sk:int,
+cs_item_sk:int,
+cs_ext_sales_price:double
+>

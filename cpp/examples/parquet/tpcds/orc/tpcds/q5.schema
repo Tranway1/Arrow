@@ -1,0 +1,8 @@
+struct<
+cs_sold_date_sk:int,
+cs_item_sk:int,
+cs_ext_sales_price:double,
+cs_net_paid_inc_tax:double,
+cs_net_paid_inc_ship_tax:double,
+cs_net_profit:double
+>

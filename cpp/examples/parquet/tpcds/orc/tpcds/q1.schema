@@ -1,0 +1,4 @@
+struct<
+cs_sold_date_sk:int,
+cs_bill_customer_sk:int
+>
