@@ -45,6 +45,7 @@
 #include "arrow/dataset/file_parquet.h"
 #include "parquet/properties.h"
 #include "v_util.h"
+#include <sys/stat.h>
 
 
 
@@ -122,7 +123,7 @@ void ReadParquetMeta(std::string filename) {
 
 
 // original version: load and read parquet file, parse into arrow and save with arrow feather.
-std::shared_ptr<arrow::Table> read_Parquet2ArrowDisk(std::string f_name, std::string comp, int comp_level = std::numeric_limits<int>::min()) {
+arrow::Status read_Parquet2ArrowDisk(std::string f_name, std::string comp, int comp_level = std::numeric_limits<int>::min()) {
 
     std::shared_ptr<arrow::io::ReadableFile> infile;
     std::cout << f_name << ".parquet at once" << std::endl;
@@ -240,29 +241,108 @@ Parquet2ArrowDict(std::string f_name, std::string comp, int comp_level = std::nu
     return outfile->Close();
 }
 
+std::vector<std::string> read_file_list(const std::string &file_name) {
+  std::ifstream file(file_name);
+  std::string line;
+  std::vector<std::string> file_list;
+
+  if (file.is_open()) {
+    while (std::getline(file, line)) {
+      file_list.push_back(line);
+    }
+    file.close();
+  } else {
+    std::cerr << "Unable to open file: " << file_name << std::endl;
+  }
+
+  return file_list;
+}
+
+bool file_exists(const std::string &file_name) {
+  struct stat buffer;
+  return (stat(file_name.c_str(), &buffer) == 0);
+}
 
 int main(int argc, char **argv) {
-    std::cout << "You have entered " << argc
-              << " arguments:" << "\n";
+  std::cout << "You have entered " << argc << " arguments:" << "\n";
 
-    for (int i = 0; i < argc; ++i)
-        std::cout << argv[i] << "\n";
+  for (int i = 0; i < argc; ++i)
+    std::cout << argv[i] << "\n";
 
-    std::string f_name = argv[1];
-    std::string comp = argv[2];
-    int compression_level = std::numeric_limits<int>::min();
-    std::string file_name = GetFileName(f_name);
-    std::cout << "file name is " << file_name << "\n";
+  std::string list_file_name = argv[1];
+  std::string comp = argv[2];
+  int compression_level = std::numeric_limits<int>::min();
 
-    if (argc > 3) {
-        compression_level = std::stoi(argv[3]);
+  if (argc > 3) {
+    compression_level = std::stoi(argv[3]);
+  }
+
+  std::vector<std::string> file_list = read_file_list(list_file_name);
+
+  int i = 0;
+  int start = 0;
+  for (const auto &f_n : file_list) {
+    std::string file_name = "/job/columns/"+f_n+".DICT";
+    i++;
+    if (i<start){
+      continue;
     }
-    std::cout << "compression " << comp
-              << " with level:" << compression_level << "\n";
+    if (!file_exists(file_name)) {
+      std::cerr << "File does not exist: " << file_name << std::endl;
+      continue;
+    }
+  //    std::string file_name = GetFileName(f_name);
+    try{
+      std::cout << "Processing file " << file_name << "\n";
+      std::cout << "compression " << comp << " with level:" << compression_level << "\n";
 
-//    read_Parquet2ArrowDisk(f_name, comp, compression_level);
-    Parquet2ArrowDict(f_name, comp, compression_level);
+      arrow::Status status;
 
-    std::cout << "Parquet/Arrow Reading and Writing complete." << std::endl;
-    return 0;
+      status = read_Parquet2ArrowDisk(file_name, comp, compression_level);
+      if (!status.ok()) {
+        std::cerr << "Error in read_Parquet2ArrowDisk for " << file_name << ": " << status.ToString() << std::endl;
+        continue;
+      }
+
+      status = Parquet2ArrowDict(file_name, comp, compression_level);
+      if (!status.ok()) {
+        std::cerr << "Error in Parquet2ArrowDict for " << file_name << ": " << status.ToString() << std::endl;
+        continue;
+      }
+
+      std::cout << "Parquet/Arrow Reading and Writing for " << file_name << " complete." << std::endl;
+    }
+    catch (const std::exception &e) {
+      std::cerr << "Exception occurred for file " << file_name << ": " << e.what() << std::endl;
+      continue;
+    }
+  }
+
+  return 0;
 }
+
+//int main(int argc, char **argv) {
+//  std::cout << "You have entered " << argc
+//            << " arguments:" << "\n";
+//
+//  for (int i = 0; i < argc; ++i)
+//    std::cout << argv[i] << "\n";
+//
+//  std::string f_name = argv[1];
+//  std::string comp = argv[2];
+//  int compression_level = std::numeric_limits<int>::min();
+//  std::string file_name = GetFileName(f_name);
+//  std::cout << "file name is " << file_name << "\n";
+//
+//  if (argc > 3) {
+//    compression_level = std::stoi(argv[3]);
+//  }
+//  std::cout << "compression " << comp
+//            << " with level:" << compression_level << "\n";
+//
+////    read_Parquet2ArrowDisk(f_name, comp, compression_level);
+//  Parquet2ArrowDict(f_name, comp, compression_level);
+//
+//  std::cout << "Parquet/Arrow Reading and Writing complete." << std::endl;
+//  return 0;
+//}

@@ -400,7 +400,7 @@ std::shared_ptr<parquet::schema::GroupNode> GetSchemaFromFile(std::string f_name
 
 // original version: load and read parquet file, parse into arrow and save with arrow
 // feather.
-std::shared_ptr<arrow::Table> read_Parquet2ArrowDisk(std::string f_name, std::string comp,
+arrow::Status read_Parquet2ArrowDisk(std::string f_name, std::string comp,
                                      int comp_level = std::numeric_limits<int>::min()) {
   std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 

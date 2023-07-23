@@ -71,12 +71,12 @@ class BaseBinaryArray : public FlatArray {
                              raw_value_offsets_[i + 1] - pos);
   }
 
-  char* GetCharArray(int64_t i) const {
-    // Account for base offset
-    i += data_->offset;
-    const offset_type pos = raw_value_offsets_[i];
-    return reinterpret_cast<char*>(raw_data_ + pos);
-  }
+    char* GetCharArray(int64_t i) const {
+        // Account for base offset
+        i += data_->offset;
+        const offset_type pos = raw_value_offsets_[i];
+        return reinterpret_cast<char*>(raw_data_ + pos);
+    }
 
   /// \brief Get binary value as a std::string
   ///
