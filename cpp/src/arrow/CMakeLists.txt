@@ -15,6 +15,8 @@
 # specific language governing permissions and limitations
 # under the License.
 
+add_definitions(-w)
+
 add_custom_target(arrow-all)
 add_custom_target(arrow)
 add_custom_target(arrow-benchmarks)

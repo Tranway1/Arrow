@@ -24,7 +24,18 @@
 #include <parquet/exception.h>
 #include <arrow/io/file.h>
 #include <arrow/api.h>
+#include <gandiva/filter.h>
+#include <gandiva/tree_expr_builder.h>
 #include "arrow/chunked_array.h"
+#include "gandiva/projector.h"
+
+void checkStatus(arrow::Status &status)
+{
+    if (!status.ok())
+    {
+        throw status.CodeAsString();
+    }
+}
 
 class IntermediateResult {
 public:
@@ -1188,7 +1199,248 @@ IntermediateResult ScanArrowTable(std::string filename,  std::vector<int>* projs
   return im;
 }
 
+arrow::Status ConvertToRecordBatch(std::shared_ptr<arrow::Table> table, std::shared_ptr<arrow::RecordBatch> &in_batch){
+    ARROW_ASSIGN_OR_RAISE(std::shared_ptr<arrow::Table> combined, table->CombineChunks(/*Can pass memory_pool here*/));
+    std::vector<std::shared_ptr<arrow::Array>> arrays;
+    for (const auto& column : combined->columns()) {
+        arrays.push_back(column->chunk(0));
+    }
+    in_batch = arrow::RecordBatch::Make(table->schema(), table->num_rows(), std::move(arrays));
 
+    return arrow::Status::OK();
+}
+
+IntermediateResult ScanGandivaTable(std::string filename,  std::vector<int>* projs,  std::vector<int>* filters,
+                                    std::vector<std::string>* ops, std::vector<std::string>* opands) {
+
+    std::shared_ptr<arrow::Table> table;
+    auto cols = UnionVector(projs, filters);
+
+    std::unordered_map<int, int> col_map;
+    int count = 0;
+    for (int col: cols) {
+        col_map[col] = count;
+        std::cout << col << "---" << count << std::endl;
+        count++;
+    }
+    auto begin = std::chrono::steady_clock::now();
+    read_feather_column_to_table(filename, &table, cols);
+    auto end = std::chrono::steady_clock::now();
+    auto t_load = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
+    auto schema = table->schema();
+
+    for (int col: cols) {
+        std::cout << col << "---" << col_map[col] << ", type: " << table->schema()->field(col_map[col])->type()->name()
+                  << std::endl;
+    }
+
+    std::cout << "==Num of col: " << schema->num_fields() << " and arrow loading time: " << t_load << std::endl;
+    std::vector<std::shared_ptr<arrow::Array>> res;
+    std::unordered_map<int, int> proj_map;
+    for (auto i = 0; i < (int) projs->size(); i++) {
+        proj_map[projs->at(i)] = i;
+        res.push_back(nullptr);
+    }
+    //IntermediateResult im = IntermediateResult{res};
+    // track qualified entries for filters and projections
+    std::shared_ptr<arrow::Array> pre = nullptr;
+
+    std::shared_ptr<gandiva::Filter>();
+
+    gandiva::NodeVector predicate_nodes;
+    //IntermediateResult cur_im;
+    /*Configuration*/
+    auto configuration = gandiva::ConfigurationBuilder::DefaultConfiguration();
+
+
+    std::vector<gandiva::ExpressionPtr> project_nodes;
+
+    // Build the projector for projection columns
+    for (auto pindex = 0; pindex < (int) projs->size(); pindex++) {
+
+        auto col_idx = projs->at(pindex);
+        auto field = schema->field(col_map[col_idx]);
+        auto field_node = gandiva::TreeExprBuilder::MakeField(field);
+        auto result_field = arrow::field("result" + field->name(), field->type());
+        project_nodes.push_back(gandiva::TreeExprBuilder::MakeExpression(field_node, result_field));
+    }
+
+
+    std::shared_ptr<gandiva::Projector> projector;
+
+    // Evaluate project
+    arrow::ArrayVector outputs;
+
+    // Create the projector based on the projection nodes
+    arrow::Status status = gandiva::Projector::Make(schema, project_nodes, gandiva::SelectionVector::MODE_UINT64,
+                                                    configuration, &projector);
+    checkStatus(status);
+
+    // start filtering first
+    for (auto findex = 0; findex < (int) filters->size(); findex++) {
+
+        auto col_idx = filters->at(findex);
+        bool is_proj = IsProj(col_idx, projs);
+
+        std::string predicate;
+        auto attr = schema->field(col_map[col_idx])->type();
+        switch (attr->id()) {
+            case arrow::Type::DOUBLE:
+                predicate = opands->at(findex);
+                if (ops->at(findex) == "EQUAL") {
+                    auto node_Literal = gandiva::TreeExprBuilder::MakeLiteral(std::stod(predicate));
+                    auto var_predicate_column = schema->field(col_map[col_idx]);
+                    auto node_predicate_column = gandiva::TreeExprBuilder::MakeField(var_predicate_column);
+                    auto gt_eq = gandiva::TreeExprBuilder::MakeFunction("equal", {node_predicate_column, node_Literal},
+                                                                        arrow::boolean());
+                    predicate_nodes.push_back(gt_eq);
+                } else if (ops->at(findex) == "GREATER") {
+                    auto node_Literal = gandiva::TreeExprBuilder::MakeLiteral(std::stod(predicate));
+                    auto var_predicate_column = schema->field(col_map[col_idx]);
+                    //auto var_predicate_column = table->schema()->GetFieldByName(table->column(col_map[col_idx])->ToString());
+                    auto node_predicate_column = gandiva::TreeExprBuilder::MakeField(var_predicate_column);
+                    auto gt_eq = gandiva::TreeExprBuilder::MakeFunction("greater_than",
+                                                                        {node_predicate_column, node_Literal},
+                                                                        arrow::boolean());
+                    predicate_nodes.push_back(gt_eq);
+
+                } else if (ops->at(findex) == "LESS") {
+                    auto node_Literal = gandiva::TreeExprBuilder::MakeLiteral(std::stod(predicate));
+                    auto var_predicate_column = schema->field(col_map[col_idx]);
+                    //auto var_predicate_column = table->schema()->GetFieldByName(table->column(col_map[col_idx])->ToString());
+                    auto node_predicate_column = gandiva::TreeExprBuilder::MakeField(var_predicate_column);
+                    auto gt_eq = gandiva::TreeExprBuilder::MakeFunction("less_than",
+                                                                        {node_predicate_column, node_Literal},
+                                                                        arrow::boolean());
+                    predicate_nodes.push_back(gt_eq);
+
+                }
+                break;
+
+//                else if (ops->at(findex) == "GREATER"){
+//                    cur_im = FilterChunkedArray(table->column(col_map[col_idx]), std::stod(predicate),
+//                                                doubleGreater, is_proj,  pre);
+//                }
+//                else if (ops->at(findex) == "GREATER_EQUAL"){
+//                    auto node_Literal = gandiva::TreeExprBuilder::MakeLiteral(std::stod(predicate));
+//                    auto var_predicate_column = table->schema()->GetFieldByName(table->column(col_map[col_idx])->ToString());
+//                    auto node_predicate_column = gandiva::TreeExprBuilder::MakeField(var_predicate_column);
+//                    auto gt_eq = gandiva::TreeExprBuilder::MakeFunction("greater_than_or_equal", {node_predicate_column, node_Literal}, arrow::boolean());
+//
+//
+//                    cur_im = FilterChunkedArray(table->column(col_map[col_idx]), std::stod(predicate),
+//                                                doubleGE, is_proj,  pre);
+//                }
+//                else if (ops->at(findex) == "LESS"){
+//                    cur_im = FilterChunkedArray(table->column(col_map[col_idx]), std::stod(predicate),
+//                                                doubleLess, is_proj,  pre);
+//                }
+//                else if (ops->at(findex) == "LESS_EQUAL"){
+//                    cur_im = FilterChunkedArray(table->column(col_map[col_idx]), std::stod(predicate),
+//                                                doubleLE, is_proj,  pre);
+//                }
+//                break;
+            case arrow::Type::INT32:
+                predicate = opands->at(findex);
+                if (ops->at(findex) == "EQUAL") {
+                    auto node_Literal = gandiva::TreeExprBuilder::MakeLiteral(std::stoi(predicate));
+                    auto var_predicate_column = schema->field(col_map[col_idx]);
+                    //auto var_predicate_column = table->schema()->GetFieldByName(table->column(col_map[col_idx])->ToString());
+                    auto node_predicate_column = gandiva::TreeExprBuilder::MakeField(var_predicate_column);
+                    auto gt_eq = gandiva::TreeExprBuilder::MakeFunction("equal", {node_predicate_column, node_Literal},
+                                                                        arrow::boolean());
+                    predicate_nodes.push_back(gt_eq);
+
+                } else if (ops->at(findex) == "GREATER") {
+                    auto node_Literal = gandiva::TreeExprBuilder::MakeLiteral(std::stoi(predicate));
+                    auto var_predicate_column = schema->field(col_map[col_idx]);
+                    //auto var_predicate_column = table->schema()->GetFieldByName(table->column(col_map[col_idx])->ToString());
+                    auto node_predicate_column = gandiva::TreeExprBuilder::MakeField(var_predicate_column);
+                    auto gt_eq = gandiva::TreeExprBuilder::MakeFunction("greater_than",
+                                                                        {node_predicate_column, node_Literal},
+                                                                        arrow::boolean());
+                    predicate_nodes.push_back(gt_eq);
+
+                } else if (ops->at(findex) == "LESS") {
+                    auto node_Literal = gandiva::TreeExprBuilder::MakeLiteral(std::stoi(predicate));
+                    auto var_predicate_column = schema->field(col_map[col_idx]);
+                    //auto var_predicate_column = table->schema()->GetFieldByName(table->column(col_map[col_idx])->ToString());
+                    auto node_predicate_column = gandiva::TreeExprBuilder::MakeField(var_predicate_column);
+                    auto gt_eq = gandiva::TreeExprBuilder::MakeFunction("less_than",
+                                                                        {node_predicate_column, node_Literal},
+                                                                        arrow::boolean());
+                    predicate_nodes.push_back(gt_eq);
+
+                }
+
+//
+//                cur_im = FilterChunkedArray(table->column(col_map[col_idx]),  std::stoi(predicate),
+//                                                intGreater, is_proj,  pre);
+//                else if (ops->at(findex) == "GREATER_EQUAL"){
+//                    auto node_Literal = gandiva::TreeExprBuilder::MakeLiteral(std::stod(predicate));
+//                    auto var_predicate_column = table->schema()->GetFieldByName(table->column(col_map[col_idx])->ToString());
+//                    auto node_predicate_column = gandiva::TreeExprBuilder::MakeField(var_predicate_column);
+//                    auto gt_eq = gandiva::TreeExprBuilder::MakeFunction("greater_than_or_equal_to", {node_predicate_column, node_Literal}, arrow::boolean());
+//                    cur_im = FilterChunkedArray(table->column(col_map[col_idx]),  std::stoi(predicate),
+//                                                intGE, is_proj,  pre);
+//                }
+//
+//                else if (ops->at(findex) == "LESS_EQUAL")
+//                    cur_im = FilterChunkedArray(table->column(col_map[col_idx]),  std::stoi(predicate),
+//                                                intLE, is_proj,  pre);
+//                else if (ops->at(findex) == "LESS")
+//                    cur_im = FilterChunkedArray(table->column(col_map[col_idx]),  std::stoi(predicate),
+//                                                intLess, is_proj,  pre);
+                break;
+            case arrow::Type::STRING:
+                predicate = opands->at(findex);
+                if (ops->at(findex) == "EQUAL") {
+                    std::cout << "string oprand: " << predicate << std::endl;
+                    auto node_Literal = gandiva::TreeExprBuilder::MakeStringLiteral(predicate);
+                    auto var_predicate_column = schema->field(col_map[col_idx]);
+                    auto node_predicate_column = gandiva::TreeExprBuilder::MakeField(var_predicate_column);
+                    auto gt_eq = gandiva::TreeExprBuilder::MakeFunction("equal", {node_predicate_column, node_Literal},
+                                                                        arrow::boolean());
+                    predicate_nodes.push_back(gt_eq);
+                    break;
+                }
+            default:
+                throw std::runtime_error(attr->name() + " type is not supported yet.");
+        }
+    }
+    gandiva::ConditionPtr condition;
+
+    if (predicate_nodes.size() > 1) {
+        auto node_and = gandiva::TreeExprBuilder::MakeAnd(predicate_nodes);
+        condition = gandiva::TreeExprBuilder::MakeCondition(node_and);
+    } else {
+        condition = gandiva::TreeExprBuilder::MakeCondition(predicate_nodes[0]);
+    }
+    auto cols_dec = table->columns();
+    std::shared_ptr<arrow::RecordBatch> in_batch;
+    status = ConvertToRecordBatch(table, in_batch);
+
+    /*Create the Selector*/
+    std::shared_ptr<gandiva::Filter> filter;
+
+    arrow::MemoryPool *pool = arrow::default_memory_pool();
+
+    status = gandiva::Filter::Make(schema, condition, configuration, &filter);
+    checkStatus(status);
+
+    std::shared_ptr<gandiva::SelectionVector> selection_vector;
+    auto number_of_records = table->num_rows();
+    status = gandiva::SelectionVector::MakeInt64(number_of_records, pool, &selection_vector);
+    checkStatus(status);
+
+    status = filter->Evaluate(*in_batch, selection_vector);
+    checkStatus(status);
+    arrow::ArrayVector output_results;
+    status = projector->Evaluate(*in_batch, selection_vector.get(), pool, &output_results);
+    checkStatus(status);
+    IntermediateResult cim = IntermediateResult{output_results};
+    return cim;
+}
 
 IntermediateResult ScanParquetTable(std::string filename,  std::vector<int>* projs,  std::vector<int>* filters,
                                   std::vector<std::string>* ops, std::vector<std::string>* opands){
